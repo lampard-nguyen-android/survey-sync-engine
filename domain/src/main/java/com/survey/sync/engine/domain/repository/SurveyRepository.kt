@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.repository
 
+import com.survey.sync.engine.domain.model.MediaAttachment
+import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.model.SyncStatus
 import com.survey.sync.engine.domain.model.UploadResult
@@ -12,12 +14,25 @@ import kotlinx.coroutines.flow.Flow
 interface SurveyRepository {
 
     /**
-     * Upload a survey to the server.
+     * Upload a survey to the server (text data only, no photos).
      *
      * @param survey The survey to upload
      * @return Result containing success/failure information
      */
     suspend fun uploadSurvey(survey: Survey): Result<UploadResult>
+
+    /**
+     * Upload a media attachment (photo) to the server.
+     * Should be called separately after survey upload.
+     *
+     * @param surveyId The survey ID
+     * @param attachment The media attachment to upload
+     * @return Result containing upload result
+     */
+    suspend fun uploadMediaAttachment(
+        surveyId: String,
+        attachment: MediaAttachment
+    ): Result<MediaUploadResult>
 
     /**
      * Get all surveys with a specific sync status.

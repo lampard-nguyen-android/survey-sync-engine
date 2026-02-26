@@ -31,7 +31,7 @@ class SurveyRepositoryImpl @Inject constructor(
 ) : SurveyRepository {
 
     /**
-     * Upload a survey to the server via API.
+     * Upload a survey to the server via API (text data only, no photos).
      */
     override suspend fun uploadSurvey(survey: Survey): Result<UploadResult> {
         return try {
@@ -44,6 +44,74 @@ class SurveyRepositoryImpl @Inject constructor(
             } else {
                 Result.failure(
                     Exception("Upload failed: HTTP ${response.code()} - ${response.message()}")
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Upload a media attachment (photo) to the server as multipart/form-data.
+     */
+    override suspend fun uploadMediaAttachment(
+        surveyId: String,
+        attachment: MediaAttachment
+    ): Result<MediaUploadResult> {
+        return try {
+            val photoFile = File(attachment.localFilePath)
+
+            if (!photoFile.exists()) {
+                return Result.failure(Exception("Photo file not found: ${attachment.localFilePath}"))
+            }
+
+            // Create multipart request body
+            val requestFile = okhttp3.RequestBody.create(
+                okhttp3.MediaType.parse("image/jpeg"),
+                photoFile
+            )
+            val filePart = okhttp3.MultipartBody.Part.createFormData(
+                "file",
+                photoFile.name,
+                requestFile
+            )
+
+            // Create text parts
+            val attachmentIdPart = okhttp3.RequestBody.create(
+                okhttp3.MediaType.parse("text/plain"),
+                attachment.attachmentId
+            )
+            val surveyIdPart = okhttp3.RequestBody.create(
+                okhttp3.MediaType.parse("text/plain"),
+                surveyId
+            )
+            val answerUuidPart = okhttp3.RequestBody.create(
+                okhttp3.MediaType.parse("text/plain"),
+                attachment.answerUuid
+            )
+
+            // Upload to server
+            val response = apiService.uploadMedia(
+                attachmentIdPart,
+                surveyIdPart,
+                answerUuidPart,
+                filePart
+            )
+
+            if (response.isSuccessful && response.body() != null) {
+                val uploadResult = response.body()!!.toDomain()
+
+                // Update attachment sync status in database
+                mediaAttachmentDao.updateAttachmentSyncStatus(
+                    attachmentId = attachment.attachmentId,
+                    status = SyncStatus.SYNCED.name,
+                    uploadedAt = uploadResult.uploadedAt
+                )
+
+                Result.success(uploadResult)
+            } else {
+                Result.failure(
+                    Exception("Media upload failed: HTTP ${response.code()} - ${response.message()}")
                 )
             }
         } catch (e: Exception) {

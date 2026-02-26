@@ -1,7 +1,9 @@
 package com.survey.sync.engine.data.mapper
 
 import com.survey.sync.engine.data.entity.MediaAttachmentEntity
+import com.survey.sync.engine.data.remote.dto.MediaUploadResponseDto
 import com.survey.sync.engine.domain.model.MediaAttachment
+import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.SyncStatus
 
 /**
@@ -30,5 +32,18 @@ fun MediaAttachment.toEntity(parentSurveyId: String): MediaAttachmentEntity {
         fileSize = fileSize,
         uploadedAt = uploadedAt,
         syncStatus = syncStatus.name
+    )
+}
+
+/**
+ * Extension function to convert MediaUploadResponseDto to Domain MediaUploadResult.
+ */
+fun MediaUploadResponseDto.toDomain(): MediaUploadResult {
+    return MediaUploadResult(
+        success = success,
+        attachmentId = attachmentId,
+        uploadedAt = uploadedAt,
+        url = url,
+        message = message
     )
 }
