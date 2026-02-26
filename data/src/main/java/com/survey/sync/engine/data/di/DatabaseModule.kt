@@ -3,6 +3,7 @@ package com.survey.sync.engine.data.di
 import android.content.Context
 import androidx.room.Room
 import com.survey.sync.engine.data.dao.AnswerDao
+import com.survey.sync.engine.data.dao.MediaAttachmentDao
 import com.survey.sync.engine.data.dao.QuestionDefinitionDao
 import com.survey.sync.engine.data.dao.SurveyDao
 import com.survey.sync.engine.data.database.AppDatabase
@@ -65,5 +66,14 @@ object DatabaseModule {
     @Singleton
     fun provideAnswerDao(database: AppDatabase): AnswerDao {
         return database.answerDao()
+    }
+
+    /**
+     * Provides MediaAttachmentDao from the database.
+     */
+    @Provides
+    @Singleton
+    fun provideMediaAttachmentDao(database: AppDatabase): MediaAttachmentDao {
+        return database.mediaAttachmentDao()
     }
 }

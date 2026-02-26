@@ -74,4 +74,22 @@ interface SurveyRepository {
      * @return Result indicating success/failure
      */
     suspend fun deleteSurvey(surveyId: String): Result<Unit>
+
+    /**
+     * Clean up synced attachments (delete local files after successful upload).
+     * This should be called after a successful survey upload.
+     *
+     * @param surveyId The survey ID
+     * @return Result containing number of files deleted
+     */
+    suspend fun cleanupSyncedAttachments(surveyId: String): Result<Int>
+
+    /**
+     * Clean up all synced attachments older than specified timestamp.
+     * Useful for periodic cleanup to free up storage.
+     *
+     * @param olderThan Timestamp threshold
+     * @return Result containing number of files deleted
+     */
+    suspend fun cleanupOldSyncedAttachments(olderThan: Long): Result<Int>
 }

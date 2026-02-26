@@ -1,6 +1,7 @@
 package com.survey.sync.engine.data.repository
 
 import com.survey.sync.engine.data.dao.AnswerDao
+import com.survey.sync.engine.data.dao.MediaAttachmentDao
 import com.survey.sync.engine.data.dao.SurveyDao
 import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
@@ -12,17 +13,20 @@ import com.survey.sync.engine.domain.model.UploadResult
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Implementation of SurveyRepository.
  * Coordinates between local database (Room) and remote API (Retrofit).
+ * Handles photo attachment cleanup after successful upload.
  */
 @Singleton
 class SurveyRepositoryImpl @Inject constructor(
     private val surveyDao: SurveyDao,
     private val answerDao: AnswerDao,
+    private val mediaAttachmentDao: MediaAttachmentDao,
     private val apiService: SurveyApiService
 ) : SurveyRepository {
 
@@ -135,6 +139,61 @@ class SurveyRepositoryImpl @Inject constructor(
         return try {
             surveyDao.deleteSurveyById(surveyId)
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Clean up synced attachments for a specific survey.
+     * Deletes local photo files after successful upload to free up storage.
+     */
+    override suspend fun cleanupSyncedAttachments(surveyId: String): Result<Int> {
+        return try {
+            // Get all synced attachments for this survey
+            val attachments = mediaAttachmentDao.getAttachmentsBySurvey(surveyId)
+                .filter { it.syncStatus == SyncStatus.SYNCED.name && it.uploadedAt != null }
+
+            var deletedCount = 0
+
+            // Delete each file from local storage
+            attachments.forEach { attachment ->
+                val file = File(attachment.localFilePath)
+                if (file.exists() && file.delete()) {
+                    // Remove attachment record from database after file deletion
+                    mediaAttachmentDao.deleteAttachmentById(attachment.attachmentId)
+                    deletedCount++
+                }
+            }
+
+            Result.success(deletedCount)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Clean up all synced attachments older than specified timestamp.
+     * Useful for periodic cleanup to free up storage on low-end devices.
+     */
+    override suspend fun cleanupOldSyncedAttachments(olderThan: Long): Result<Int> {
+        return try {
+            // Get all synced attachments older than threshold
+            val oldAttachments = mediaAttachmentDao.getSyncedAttachmentsOlderThan(olderThan)
+
+            var deletedCount = 0
+
+            // Delete each file from local storage
+            oldAttachments.forEach { attachment ->
+                val file = File(attachment.localFilePath)
+                if (file.exists() && file.delete()) {
+                    // Remove attachment record from database after file deletion
+                    mediaAttachmentDao.deleteAttachmentById(attachment.attachmentId)
+                    deletedCount++
+                }
+            }
+
+            Result.success(deletedCount)
         } catch (e: Exception) {
             Result.failure(e)
         }
