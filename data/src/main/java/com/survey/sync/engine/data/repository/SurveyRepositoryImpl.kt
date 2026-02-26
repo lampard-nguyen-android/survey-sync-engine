@@ -7,12 +7,15 @@ import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
 import com.survey.sync.engine.data.mapper.toUploadDto
 import com.survey.sync.engine.data.remote.api.SurveyApiService
+import com.survey.sync.engine.domain.model.MediaAttachment
+import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.model.SyncStatus
 import com.survey.sync.engine.domain.model.UploadResult
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -67,7 +70,7 @@ class SurveyRepositoryImpl @Inject constructor(
 
             // Create multipart request body
             val requestFile = okhttp3.RequestBody.create(
-                okhttp3.MediaType.parse("image/jpeg"),
+                "image/jpeg".toMediaTypeOrNull(),
                 photoFile
             )
             val filePart = okhttp3.MultipartBody.Part.createFormData(
@@ -78,15 +81,15 @@ class SurveyRepositoryImpl @Inject constructor(
 
             // Create text parts
             val attachmentIdPart = okhttp3.RequestBody.create(
-                okhttp3.MediaType.parse("text/plain"),
+                "text/plain".toMediaTypeOrNull(),
                 attachment.attachmentId
             )
             val surveyIdPart = okhttp3.RequestBody.create(
-                okhttp3.MediaType.parse("text/plain"),
+                "text/plain".toMediaTypeOrNull(),
                 surveyId
             )
             val answerUuidPart = okhttp3.RequestBody.create(
-                okhttp3.MediaType.parse("text/plain"),
+                "text/plain".toMediaTypeOrNull(),
                 attachment.answerUuid
             )
 
