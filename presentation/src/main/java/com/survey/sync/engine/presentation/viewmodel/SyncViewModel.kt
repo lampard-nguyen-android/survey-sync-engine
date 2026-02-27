@@ -2,10 +2,8 @@ package com.survey.sync.engine.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.survey.sync.engine.domain.model.MediaAttachment
-import com.survey.sync.engine.domain.usecase.GetMediaAttachmentsUseCase
+import com.survey.sync.engine.domain.sync.SyncScheduler
 import com.survey.sync.engine.domain.usecase.GetPendingSurveysUseCase
-import com.survey.sync.engine.domain.usecase.UploadSurveyUseCase
 import com.survey.sync.engine.presentation.state.SyncResultItem
 import com.survey.sync.engine.presentation.state.SyncUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,13 +15,18 @@ import javax.inject.Inject
 
 /**
  * ViewModel for the Sync screen.
- * Handles manual sync trigger and displays sync results.
+ * Handles manual sync trigger via SyncScheduler and displays sync results.
+ *
+ * Addresses Scenario 4: Concurrent Sync Prevention
+ * - Uses SyncScheduler interface backed by WorkManager
+ * - WorkManager uses ExistingWorkPolicy.KEEP to prevent duplicate syncs
+ * - If a sync is already running (background or UI-triggered), new requests are ignored
+ * - Observes sync status to show real-time progress to user
  */
 @HiltViewModel
 class SyncViewModel @Inject constructor(
     private val getPendingSurveysUseCase: GetPendingSurveysUseCase,
-    private val uploadSurveyUseCase: UploadSurveyUseCase,
-    private val getMediaAttachmentsUseCase: GetMediaAttachmentsUseCase
+    private val syncScheduler: SyncScheduler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SyncUiState())
@@ -31,6 +34,7 @@ class SyncViewModel @Inject constructor(
 
     init {
         loadPendingSurveyCount()
+        observeSyncStatus()
     }
 
     /**
@@ -38,80 +42,11 @@ class SyncViewModel @Inject constructor(
      */
     fun loadPendingSurveyCount() {
         viewModelScope.launch {
-            getPendingSurveysUseCase().fold(
+            getPendingSurveysUseCase().handle(
+                onError = { /* Ignore error for count */ },
                 onSuccess = { surveys ->
                     _uiState.value = _uiState.value.copy(
                         pendingSurveyCount = surveys.size
-                    )
-                },
-                onFailure = { /* Ignore error for count */ }
-            )
-        }
-    }
-
-    /**
-     * Trigger manual sync of all pending surveys.
-     */
-    fun syncPendingSurveys() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isSyncing = true,
-                syncResults = emptyList(),
-                errorMessage = null
-            )
-
-            // Get all pending surveys
-            getPendingSurveysUseCase().fold(
-                onSuccess = { surveys ->
-                    val results = mutableListOf<SyncResultItem>()
-
-                    // Upload each survey sequentially
-                    surveys.forEach { survey ->
-                        // Get media attachments for this survey
-                        val attachments = getMediaAttachmentsForSurvey(survey.surveyId)
-
-                        // Upload survey with attachments
-                        uploadSurveyUseCase(
-                            survey = survey,
-                            mediaAttachments = attachments,
-                            cleanupAttachments = true
-                        ).fold(
-                            onSuccess = { result ->
-                                results.add(
-                                    SyncResultItem(
-                                        surveyId = survey.surveyId,
-                                        isSuccess = true,
-                                        mediaUploadSuccessCount = result.mediaUploadSuccessCount,
-                                        mediaUploadFailureCount = result.mediaUploadFailureCount,
-                                        totalMediaCount = result.totalMediaCount
-                                    )
-                                )
-                            },
-                            onFailure = { error ->
-                                results.add(
-                                    SyncResultItem(
-                                        surveyId = survey.surveyId,
-                                        isSuccess = false,
-                                        errorMessage = error.message ?: "Upload failed"
-                                    )
-                                )
-                            }
-                        )
-                    }
-
-                    _uiState.value = _uiState.value.copy(
-                        isSyncing = false,
-                        syncResults = results,
-                        pendingSurveyCount = 0 // Will be updated by next load
-                    )
-
-                    // Reload pending count
-                    loadPendingSurveyCount()
-                },
-                onFailure = { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isSyncing = false,
-                        errorMessage = error.message ?: "Failed to load pending surveys"
                     )
                 }
             )
@@ -119,11 +54,95 @@ class SyncViewModel @Inject constructor(
     }
 
     /**
-     * Get media attachments for a survey.
-     * This is a simplified version - in production, this would query the database.
+     * Trigger manual sync via WorkManager.
+     *
+     * Scenario 4 Protection:
+     * - If a sync is already running, WorkManager will KEEP the existing work
+     * - The new request will be ignored, preventing corruption or duplication
+     * - UI will show that sync is already in progress
      */
-    private suspend fun getMediaAttachmentsForSurvey(surveyId: String): List<MediaAttachment> {
-        return getMediaAttachmentsUseCase(surveyId).getOrNull() ?: emptyList()
+    fun syncPendingSurveys() {
+        viewModelScope.launch {
+            // Check if sync is already running
+            val isRunning = syncScheduler.isSyncRunning()
+
+            if (isRunning) {
+                // Sync already in progress - show message to user
+                _uiState.value = _uiState.value.copy(
+                    isSyncing = true,
+                    errorMessage = "Sync already in progress. Please wait..."
+                )
+                return@launch
+            }
+
+            // Trigger sync via SyncScheduler
+            // WorkManager will handle concurrent prevention automatically
+            syncScheduler.triggerImmediateSync()
+
+            // UI state will be updated by observeSyncStatus()
+            _uiState.value = _uiState.value.copy(
+                isSyncing = true,
+                syncResults = emptyList(),
+                errorMessage = null
+            )
+        }
+    }
+
+    /**
+     * Observe sync status and update UI accordingly.
+     * This monitors both background periodic syncs and manual UI syncs.
+     */
+    private fun observeSyncStatus() {
+        viewModelScope.launch {
+            // Poll sync status periodically
+            // In production, this could use WorkManager LiveData/Flow observers
+            while (true) {
+                val isRunning = syncScheduler.isSyncRunning()
+
+                if (_uiState.value.isSyncing && !isRunning) {
+                    // Sync just completed - load results
+                    loadSyncResults()
+                }
+
+                // Update syncing state
+                if (_uiState.value.isSyncing != isRunning) {
+                    _uiState.value = _uiState.value.copy(
+                        isSyncing = isRunning
+                    )
+                }
+
+                kotlinx.coroutines.delay(1000) // Poll every second
+            }
+        }
+    }
+
+    /**
+     * Load sync results from SyncScheduler output.
+     */
+    private suspend fun loadSyncResults() {
+        val lastResult = syncScheduler.getLastSyncResult()
+
+        if (lastResult != null) {
+            // Convert WorkManager result to UI state
+            // Note: WorkManager doesn't provide per-survey details
+            // so we show a summary result
+            val summary = SyncResultItem(
+                surveyId = "SUMMARY",
+                isSuccess = lastResult.failureCount == 0,
+                mediaUploadSuccessCount = 0,
+                mediaUploadFailureCount = 0,
+                totalMediaCount = 0,
+                errorMessage = lastResult.errorMessage
+            )
+
+            _uiState.value = _uiState.value.copy(
+                syncResults = listOf(summary),
+                errorMessage = lastResult.errorMessage
+            )
+
+            // Reload pending count
+            loadPendingSurveyCount()
+        }
     }
 
     /**
@@ -138,5 +157,19 @@ class SyncViewModel @Inject constructor(
      */
     fun clearResults() {
         _uiState.value = _uiState.value.copy(syncResults = emptyList())
+    }
+
+    /**
+     * Cancel any running sync work.
+     * Use with caution - only for user-initiated cancellation.
+     */
+    fun cancelSync() {
+        viewModelScope.launch {
+            syncScheduler.cancelAllSync()
+            _uiState.value = _uiState.value.copy(
+                isSyncing = false,
+                errorMessage = "Sync cancelled by user"
+            )
+        }
     }
 }

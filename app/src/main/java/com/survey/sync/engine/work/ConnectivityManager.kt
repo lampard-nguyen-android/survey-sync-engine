@@ -1,4 +1,4 @@
-package com.survey.sync.engine.data.utils
+package com.survey.sync.engine.work
 
 import android.content.Context
 import android.net.ConnectivityManager

@@ -69,8 +69,8 @@ class UploadSurveyUseCase @Inject constructor(
                         attachments = mediaAttachments
                     )
 
-                    mediaSuccessCount = mediaResults.values.count { it.isSuccess() }
-                    mediaFailureCount = mediaResults.values.count { it.isError() }
+                    mediaSuccessCount = mediaResults.values.count { it.isSuccess }
+                    mediaFailureCount = mediaResults.values.count { it.isError }
                 }
 
                 // Step 3: Update sync status

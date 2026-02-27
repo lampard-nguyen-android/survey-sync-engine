@@ -8,76 +8,83 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.Operation
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
+import com.survey.sync.engine.domain.sync.SyncScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manager for scheduling survey sync work.
+ * WorkManager implementation of SyncScheduler.
  *
  * Addresses Scenario 1 (Offline Storage):
  * - Schedules periodic sync to check for pending surveys
  * - Triggers sync when connectivity is restored
  * - Uses exponential backoff for failed syncs
  *
+ * Addresses Scenario 4 (Concurrent Sync Prevention):
+ * - Uses ExistingWorkPolicy.KEEP to prevent duplicate syncs
+ * - Only one sync operation runs at a time
+ * - Second caller's request is safely ignored without corruption
+ *
  * Features:
- * - Periodic sync (every 2 hours) with connectivity constraint
- * - Manual one-time sync
+ * - Periodic sync (every 4 hours) with connectivity constraint
+ * - Manual one-time sync with concurrency protection
  * - Exponential backoff strategy (initial 30s, max 5 minutes)
  * - Battery-friendly (requires device not in low battery state)
  */
 @Singleton
 class SyncWorkManager @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : SyncScheduler {
     private val workManager = WorkManager.getInstance(context)
 
     /**
      * Schedule periodic background sync.
-     * Runs every 2 hours when connected to network.
-     * Addresses Scenario 1: Automatically syncs when agent reaches connectivity.
+     * Optimized for battery preservation in rural areas.
      */
     fun schedulePeriodicSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED) // Only run when connected
-            .setRequiresBatteryNotLow(true) // Don't drain battery when low
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
             .build()
 
         val periodicSyncRequest = PeriodicWorkRequestBuilder<SurveySyncWorker>(
-            repeatInterval = 2, // Every 2 hours
+            repeatInterval = 4, // Increased to 4 hours to save battery on low-end devices
             repeatIntervalTimeUnit = TimeUnit.HOURS,
-            flexTimeInterval = 30, // Can run within 30 minute window
+            flexTimeInterval = 30,
             flexTimeIntervalUnit = TimeUnit.MINUTES
         )
             .setConstraints(constraints)
             .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL, // Exponential backoff
-                30, // Initial backoff delay: 30 seconds
+                BackoffPolicy.EXPONENTIAL,
+                30,
                 TimeUnit.SECONDS
             )
             .addTag(SurveySyncWorker.TAG_SYNC)
-            .addTag(SurveySyncWorker.TAG_PERIODIC)
             .build()
 
-        // Use KEEP to avoid rescheduling if already scheduled
         workManager.enqueueUniquePeriodicWork(
             SurveySyncWorker.WORKER_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.KEEP, // Prevent concurrent execution
             periodicSyncRequest
         )
     }
 
     /**
      * Trigger immediate one-time sync.
-     * Used for manual sync from UI or when new survey is created.
+     * Optimized to prevent "Restart Loops" from multiple taps.
+     *
+     * Scenario 4 Protection:
+     * - Uses ExistingWorkPolicy.KEEP
+     * - If sync already running, new request is ignored
+     * - No corruption or duplication of work
      */
-    fun triggerImmediateSync(): Operation {
+    override suspend fun triggerImmediateSync() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -90,48 +97,19 @@ class SyncWorkManager @Inject constructor(
                 TimeUnit.SECONDS
             )
             .addTag(SurveySyncWorker.TAG_SYNC)
-            .addTag(SurveySyncWorker.TAG_MANUAL)
             .build()
 
-        return workManager.enqueueUniqueWork(
+        workManager.enqueueUniqueWork(
             "${SurveySyncWorker.WORKER_NAME}_manual",
-            ExistingWorkPolicy.REPLACE, // Replace any existing manual sync
+            ExistingWorkPolicy.KEEP, // KEEP = ignore new request if already running
             oneTimeSyncRequest
-        )
-    }
-
-    /**
-     * Schedule sync with custom delay.
-     * Useful for retrying after a failed sync.
-     */
-    fun scheduleSyncWithDelay(delayMinutes: Long): Operation {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val delayedSyncRequest = OneTimeWorkRequestBuilder<SurveySyncWorker>()
-            .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                30,
-                TimeUnit.SECONDS
-            )
-            .addTag(SurveySyncWorker.TAG_SYNC)
-            .build()
-
-        return workManager.enqueueUniqueWork(
-            "${SurveySyncWorker.WORKER_NAME}_delayed",
-            ExistingWorkPolicy.REPLACE,
-            delayedSyncRequest
         )
     }
 
     /**
      * Cancel all sync work.
      */
-    fun cancelAllSync() {
+    override suspend fun cancelAllSync() {
         workManager.cancelAllWorkByTag(SurveySyncWorker.TAG_SYNC)
     }
 
@@ -152,7 +130,7 @@ class SyncWorkManager @Inject constructor(
      * Check if sync is currently running.
      */
     @SuppressLint("RestrictedApi")
-    suspend fun isSyncRunning(): Boolean {
+    override suspend fun isSyncRunning(): Boolean {
         val workInfos = workManager.getWorkInfosByTag(SurveySyncWorker.TAG_SYNC).await()
         return workInfos.any { it.state == WorkInfo.State.RUNNING }
     }
@@ -161,7 +139,7 @@ class SyncWorkManager @Inject constructor(
      * Get last sync result.
      */
     @SuppressLint("RestrictedApi")
-    suspend fun getLastSyncResult(): SyncResult? {
+    override suspend fun getLastSyncResult(): SyncScheduler.SyncResult? {
         val workInfos = workManager.getWorkInfosByTag(SurveySyncWorker.TAG_SYNC).await()
         val lastWork = workInfos
             .filter { it.state.isFinished }
@@ -170,7 +148,7 @@ class SyncWorkManager @Inject constructor(
             }
 
         return lastWork?.let { workInfo ->
-            SyncResult(
+            SyncScheduler.SyncResult(
                 totalSurveys = workInfo.outputData.getInt(SurveySyncWorker.KEY_TOTAL_SURVEYS, 0),
                 successCount = workInfo.outputData.getInt(SurveySyncWorker.KEY_SUCCESS_COUNT, 0),
                 failureCount = workInfo.outputData.getInt(SurveySyncWorker.KEY_FAILURE_COUNT, 0),
@@ -179,15 +157,4 @@ class SyncWorkManager @Inject constructor(
             )
         }
     }
-
-    /**
-     * Result data from sync work.
-     */
-    data class SyncResult(
-        val totalSurveys: Int,
-        val successCount: Int,
-        val failureCount: Int,
-        val timestamp: Long,
-        val errorMessage: String?
-    )
 }
