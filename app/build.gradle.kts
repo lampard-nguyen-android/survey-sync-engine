@@ -55,7 +55,12 @@ dependencies {
     // Dependency Injection
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
-    
+
+    // WorkManager
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.hilt.work)
+    kapt(libs.hilt.compiler)
+
     // Navigation (needed for SurveySyncEngineNavigation composable)
     implementation(libs.navigation.compose)
     
