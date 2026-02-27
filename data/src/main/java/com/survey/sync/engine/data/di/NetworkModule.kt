@@ -2,6 +2,7 @@ package com.survey.sync.engine.data.di
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.survey.sync.engine.data.network.DomainResultCallAdapterFactory
 import com.survey.sync.engine.data.remote.api.SurveyApiService
 import dagger.Module
 import dagger.Provides
@@ -63,7 +64,8 @@ object NetworkModule {
     }
 
     /**
-     * Provides Retrofit instance configured with Moshi converter.
+     * Provides Retrofit instance configured with DomainResult CallAdapter and Moshi converter.
+     * The CallAdapter automatically wraps all API responses in DomainResult for error handling.
      */
     @Provides
     @Singleton
@@ -74,6 +76,7 @@ object NetworkModule {
         return Retrofit.Builder()
             .baseUrl(SurveyApiService.BASE_URL)
             .client(okHttpClient)
+            .addCallAdapterFactory(DomainResultCallAdapterFactory(moshi))
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
     }

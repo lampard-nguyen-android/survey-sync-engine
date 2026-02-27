@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import javax.inject.Inject
@@ -14,9 +16,9 @@ class SaveSurveyUseCase @Inject constructor(
      * Save a survey to local database.
      *
      * @param survey The survey to save
-     * @return Result indicating success or failure
+     * @return DomainResult indicating success or failure
      */
-    suspend operator fun invoke(survey: Survey): Result<Unit> {
+    suspend operator fun invoke(survey: Survey): DomainResult<DomainError, Unit> {
         return repository.saveSurvey(survey)
     }
 }

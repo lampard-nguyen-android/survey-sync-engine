@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import javax.inject.Inject
@@ -13,9 +15,9 @@ class GetPendingSurveysUseCase @Inject constructor(
     /**
      * Get all surveys with PENDING status.
      *
-     * @return Result containing list of pending surveys or error
+     * @return DomainResult containing list of pending surveys or error
      */
-    suspend operator fun invoke(): Result<List<Survey>> {
+    suspend operator fun invoke(): DomainResult<DomainError, List<Survey>> {
         return repository.getPendingSurveys()
     }
 }

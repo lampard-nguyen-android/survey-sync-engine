@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import javax.inject.Inject
 
@@ -14,9 +16,9 @@ class CleanupSyncedAttachmentsUseCase @Inject constructor(
      * Clean up synced attachments for a specific survey.
      *
      * @param surveyId The survey ID
-     * @return Result containing number of files deleted
+     * @return DomainResult containing number of files deleted
      */
-    suspend operator fun invoke(surveyId: String): Result<Int> {
+    suspend operator fun invoke(surveyId: String): DomainResult<DomainError, Int> {
         return repository.cleanupSyncedAttachments(surveyId)
     }
 }

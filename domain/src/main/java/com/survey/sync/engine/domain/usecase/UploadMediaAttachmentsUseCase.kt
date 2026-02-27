@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.repository.SurveyRepository
@@ -17,12 +19,12 @@ class UploadMediaAttachmentsUseCase @Inject constructor(
      *
      * @param surveyId The survey ID
      * @param attachment The attachment to upload
-     * @return Result containing upload result or error
+     * @return DomainResult containing upload result or error
      */
     suspend fun uploadSingle(
         surveyId: String,
         attachment: MediaAttachment
-    ): Result<MediaUploadResult> {
+    ): DomainResult<DomainError, MediaUploadResult> {
         return repository.uploadMediaAttachment(surveyId, attachment)
     }
 
@@ -37,8 +39,8 @@ class UploadMediaAttachmentsUseCase @Inject constructor(
     suspend operator fun invoke(
         surveyId: String,
         attachments: List<MediaAttachment>
-    ): Map<String, Result<MediaUploadResult>> {
-        val results = mutableMapOf<String, Result<MediaUploadResult>>()
+    ): Map<String, DomainResult<DomainError, MediaUploadResult>> {
+        val results = mutableMapOf<String, DomainResult<DomainError, MediaUploadResult>>()
 
         attachments.forEach { attachment ->
             val result = uploadSingle(surveyId, attachment)

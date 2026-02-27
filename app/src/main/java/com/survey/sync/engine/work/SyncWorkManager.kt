@@ -1,5 +1,6 @@
 package com.survey.sync.engine.work
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -150,6 +151,7 @@ class SyncWorkManager @Inject constructor(
     /**
      * Check if sync is currently running.
      */
+    @SuppressLint("RestrictedApi")
     suspend fun isSyncRunning(): Boolean {
         val workInfos = workManager.getWorkInfosByTag(SurveySyncWorker.TAG_SYNC).await()
         return workInfos.any { it.state == WorkInfo.State.RUNNING }
@@ -158,6 +160,7 @@ class SyncWorkManager @Inject constructor(
     /**
      * Get last sync result.
      */
+    @SuppressLint("RestrictedApi")
     suspend fun getLastSyncResult(): SyncResult? {
         val workInfos = workManager.getWorkInfosByTag(SurveySyncWorker.TAG_SYNC).await()
         val lastWork = workInfos

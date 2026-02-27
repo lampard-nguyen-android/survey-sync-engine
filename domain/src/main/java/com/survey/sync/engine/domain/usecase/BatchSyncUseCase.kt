@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.repository.SurveyRepository
 import javax.inject.Inject
@@ -42,15 +44,15 @@ class BatchSyncUseCase @Inject constructor(
      * Sync all pending surveys.
      * Returns detailed results for each survey.
      */
-    suspend operator fun invoke(): Result<BatchSyncResult> {
+    suspend operator fun invoke(): DomainResult<DomainError, BatchSyncResult> {
         return try {
             // Get all pending surveys
             val pendingSurveys = repository.getPendingSurveys().getOrElse {
-                return Result.failure(it)
+                return DomainResult.error(it)
             }
 
             if (pendingSurveys.isEmpty()) {
-                return Result.success(
+                return DomainResult.success(
                     BatchSyncResult(
                         totalSurveys = 0,
                         successCount = 0,
@@ -76,7 +78,7 @@ class BatchSyncUseCase @Inject constructor(
                 }
             }
 
-            Result.success(
+            DomainResult.success(
                 BatchSyncResult(
                     totalSurveys = pendingSurveys.size,
                     successCount = successCount,
@@ -85,7 +87,7 @@ class BatchSyncUseCase @Inject constructor(
                 )
             )
         } catch (e: Exception) {
-            Result.failure(e)
+            DomainResult.error(DomainError.UnexpectedError(e.message ?: "Unknown error"))
         }
     }
 
@@ -105,7 +107,14 @@ class BatchSyncUseCase @Inject constructor(
                 cleanupAttachments = true
             )
 
-            uploadResult.fold(
+            uploadResult.handle(
+                onError = { error ->
+                    SurveyResult(
+                        surveyId = survey.surveyId,
+                        isSuccess = false,
+                        errorMessage = error.toString()
+                    )
+                },
                 onSuccess = { result ->
                     SurveyResult(
                         surveyId = survey.surveyId,
@@ -113,13 +122,6 @@ class BatchSyncUseCase @Inject constructor(
                         mediaUploadSuccessCount = result.mediaUploadSuccessCount,
                         mediaUploadFailureCount = result.mediaUploadFailureCount,
                         totalMediaCount = result.totalMediaCount
-                    )
-                },
-                onFailure = { error ->
-                    SurveyResult(
-                        surveyId = survey.surveyId,
-                        isSuccess = false,
-                        errorMessage = error.message ?: "Unknown error"
                     )
                 }
             )

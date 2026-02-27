@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.repository
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.Survey
@@ -10,6 +12,11 @@ import kotlinx.coroutines.flow.Flow
 /**
  * Repository interface for survey operations.
  * Defines the contract for data operations - implemented in the data layer.
+ *
+ * All operations return DomainResult for consistent error handling:
+ * - API calls automatically wrapped by DomainResultCallAdapter
+ * - Database operations wrapped by safeDaoCall helper
+ * - All errors mapped to appropriate DomainError subtypes
  */
 interface SurveyRepository {
 
@@ -17,9 +24,9 @@ interface SurveyRepository {
      * Upload a survey to the server (text data only, no photos).
      *
      * @param survey The survey to upload
-     * @return Result containing success/failure information
+     * @return DomainResult containing upload result or error details
      */
-    suspend fun uploadSurvey(survey: Survey): Result<UploadResult>
+    suspend fun uploadSurvey(survey: Survey): DomainResult<DomainError, UploadResult>
 
     /**
      * Upload a media attachment (photo) to the server.
@@ -27,44 +34,47 @@ interface SurveyRepository {
      *
      * @param surveyId The survey ID
      * @param attachment The media attachment to upload
-     * @return Result containing upload result
+     * @return DomainResult containing upload result or error details
      */
     suspend fun uploadMediaAttachment(
         surveyId: String,
         attachment: MediaAttachment
-    ): Result<MediaUploadResult>
+    ): DomainResult<DomainError, MediaUploadResult>
 
     /**
      * Get all surveys with a specific sync status.
      *
      * @param status The sync status to filter by
-     * @return List of surveys
+     * @return DomainResult containing list of surveys or error details
      */
-    suspend fun getSurveysByStatus(status: SyncStatus): Result<List<Survey>>
+    suspend fun getSurveysByStatus(status: SyncStatus): DomainResult<DomainError, List<Survey>>
 
     /**
      * Get all pending surveys (ready to be uploaded).
      *
-     * @return List of pending surveys with their answers
+     * @return DomainResult containing list of pending surveys or error details
      */
-    suspend fun getPendingSurveys(): Result<List<Survey>>
+    suspend fun getPendingSurveys(): DomainResult<DomainError, List<Survey>>
 
     /**
      * Save a survey locally (offline storage).
      *
      * @param survey The survey to save
-     * @return Result indicating success/failure
+     * @return DomainResult indicating success or error details
      */
-    suspend fun saveSurvey(survey: Survey): Result<Unit>
+    suspend fun saveSurvey(survey: Survey): DomainResult<DomainError, Unit>
 
     /**
      * Update the sync status of a survey.
      *
      * @param surveyId The survey ID
      * @param status The new sync status
-     * @return Result indicating success/failure
+     * @return DomainResult indicating success or error details
      */
-    suspend fun updateSyncStatus(surveyId: String, status: SyncStatus): Result<Unit>
+    suspend fun updateSyncStatus(
+        surveyId: String,
+        status: SyncStatus
+    ): DomainResult<DomainError, Unit>
 
     /**
      * Observe surveys by status as a Flow for reactive updates.
@@ -78,33 +88,33 @@ interface SurveyRepository {
      * Get a specific survey by ID.
      *
      * @param surveyId The survey ID
-     * @return The survey if found, null otherwise
+     * @return DomainResult containing the survey if found, or error details
      */
-    suspend fun getSurveyById(surveyId: String): Result<Survey?>
+    suspend fun getSurveyById(surveyId: String): DomainResult<DomainError, Survey?>
 
     /**
      * Delete a survey by ID.
      *
      * @param surveyId The survey ID
-     * @return Result indicating success/failure
+     * @return DomainResult indicating success or error details
      */
-    suspend fun deleteSurvey(surveyId: String): Result<Unit>
+    suspend fun deleteSurvey(surveyId: String): DomainResult<DomainError, Unit>
 
     /**
      * Clean up synced attachments (delete local files after successful upload).
      * This should be called after a successful survey upload.
      *
      * @param surveyId The survey ID
-     * @return Result containing number of files deleted
+     * @return DomainResult containing number of files deleted or error details
      */
-    suspend fun cleanupSyncedAttachments(surveyId: String): Result<Int>
+    suspend fun cleanupSyncedAttachments(surveyId: String): DomainResult<DomainError, Int>
 
     /**
      * Clean up all synced attachments older than specified timestamp.
      * Useful for periodic cleanup to free up storage.
      *
      * @param olderThan Timestamp threshold
-     * @return Result containing number of files deleted
+     * @return DomainResult containing number of files deleted or error details
      */
-    suspend fun cleanupOldSyncedAttachments(olderThan: Long): Result<Int>
+    suspend fun cleanupOldSyncedAttachments(olderThan: Long): DomainResult<DomainError, Int>
 }

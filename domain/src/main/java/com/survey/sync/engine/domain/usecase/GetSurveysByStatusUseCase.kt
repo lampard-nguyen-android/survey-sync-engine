@@ -1,5 +1,7 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.model.SyncStatus
 import com.survey.sync.engine.domain.repository.SurveyRepository
@@ -15,22 +17,22 @@ class GetSurveysByStatusUseCase @Inject constructor(
      * Get all surveys with a specific sync status.
      *
      * @param status The sync status to filter by (null for all surveys)
-     * @return Result containing list of surveys or error
+     * @return DomainResult containing list of surveys or error
      */
-    suspend operator fun invoke(status: SyncStatus?): Result<List<Survey>> {
+    suspend operator fun invoke(status: SyncStatus?): DomainResult<DomainError, List<Survey>> {
         return if (status == null) {
             // Get all surveys by fetching each status and combining
             try {
                 val allSurveys = mutableListOf<Survey>()
                 SyncStatus.values().forEach { syncStatus ->
-                    repository.getSurveysByStatus(syncStatus).fold(
-                        onSuccess = { allSurveys.addAll(it) },
-                        onFailure = { return Result.failure(it) }
+                    repository.getSurveysByStatus(syncStatus).handle(
+                        onError = { return DomainResult.error(it) },
+                        onSuccess = { allSurveys.addAll(it) }
                     )
                 }
-                Result.success(allSurveys)
+                DomainResult.success(allSurveys)
             } catch (e: Exception) {
-                Result.failure(e)
+                DomainResult.error(DomainError.UnexpectedError(e.message ?: "Unknown error"))
             }
         } else {
             repository.getSurveysByStatus(status)

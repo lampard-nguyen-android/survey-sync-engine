@@ -7,6 +7,9 @@ import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
 import com.survey.sync.engine.data.mapper.toUploadDto
 import com.survey.sync.engine.data.remote.api.SurveyApiService
+import com.survey.sync.engine.data.util.safeDaoCall
+import com.survey.sync.engine.domain.error.DomainError
+import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.Survey
@@ -23,7 +26,11 @@ import javax.inject.Singleton
 /**
  * Implementation of SurveyRepository.
  * Coordinates between local database (Room) and remote API (Retrofit).
- * Handles photo attachment cleanup after successful upload.
+ *
+ * Error handling:
+ * - API calls: Automatically wrapped by DomainResultCallAdapter
+ * - DAO operations: Wrapped by safeDaoCall helper
+ * - File operations: Manual error handling with DomainError.ValidationError
  */
 @Singleton
 class SurveyRepositoryImpl @Inject constructor(
@@ -35,124 +42,101 @@ class SurveyRepositoryImpl @Inject constructor(
 
     /**
      * Upload a survey to the server via API (text data only, no photos).
+     * Error handling is automatic via DomainResultCallAdapter.
      */
-    override suspend fun uploadSurvey(survey: Survey): Result<UploadResult> {
-        return try {
-            val uploadDto = survey.toUploadDto()
-            val response = apiService.uploadSurvey(uploadDto)
-
-            if (response.isSuccessful && response.body() != null) {
-                val uploadResult = response.body()!!.toDomain()
-                Result.success(uploadResult)
-            } else {
-                Result.failure(
-                    Exception("Upload failed: HTTP ${response.code()} - ${response.message()}")
-                )
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    override suspend fun uploadSurvey(survey: Survey): DomainResult<DomainError, UploadResult> {
+        val uploadDto = survey.toUploadDto()
+        return apiService.uploadSurvey(uploadDto).map { it.toDomain() }
     }
 
     /**
      * Upload a media attachment (photo) to the server as multipart/form-data.
+     * API call error handling is automatic. File validation and DB updates use manual handling.
      */
     override suspend fun uploadMediaAttachment(
         surveyId: String,
         attachment: MediaAttachment
-    ): Result<MediaUploadResult> {
-        return try {
-            val photoFile = File(attachment.localFilePath)
+    ): DomainResult<DomainError, MediaUploadResult> {
+        val photoFile = File(attachment.localFilePath)
 
-            if (!photoFile.exists()) {
-                return Result.failure(Exception("Photo file not found: ${attachment.localFilePath}"))
-            }
+        // Validate file exists
+        if (!photoFile.exists()) {
+            return DomainResult.error(
+                DomainError.ValidationError(
+                    errorCode = "FILE_NOT_FOUND",
+                    errorMessage = "Photo file not found: ${attachment.localFilePath}",
+                    isRetryable = false
+                )
+            )
+        }
 
-            // Create multipart request body
-            val requestFile = okhttp3.RequestBody.create(
-                "image/jpeg".toMediaTypeOrNull(),
-                photoFile
-            )
-            val filePart = okhttp3.MultipartBody.Part.createFormData(
-                "file",
-                photoFile.name,
-                requestFile
-            )
+        // Create multipart request body
+        val requestFile = okhttp3.RequestBody.create(
+            "image/jpeg".toMediaTypeOrNull(),
+            photoFile
+        )
+        val filePart = okhttp3.MultipartBody.Part.createFormData(
+            "file",
+            photoFile.name,
+            requestFile
+        )
 
-            // Create text parts
-            val attachmentIdPart = okhttp3.RequestBody.create(
-                "text/plain".toMediaTypeOrNull(),
-                attachment.attachmentId
-            )
-            val surveyIdPart = okhttp3.RequestBody.create(
-                "text/plain".toMediaTypeOrNull(),
-                surveyId
-            )
-            val answerUuidPart = okhttp3.RequestBody.create(
-                "text/plain".toMediaTypeOrNull(),
-                attachment.answerUuid
-            )
+        // Create text parts
+        val attachmentIdPart = okhttp3.RequestBody.create(
+            "text/plain".toMediaTypeOrNull(),
+            attachment.attachmentId
+        )
+        val surveyIdPart = okhttp3.RequestBody.create(
+            "text/plain".toMediaTypeOrNull(),
+            surveyId
+        )
+        val answerUuidPart = okhttp3.RequestBody.create(
+            "text/plain".toMediaTypeOrNull(),
+            attachment.answerUuid
+        )
 
-            // Upload to server
-            val response = apiService.uploadMedia(
-                attachmentIdPart,
-                surveyIdPart,
-                answerUuidPart,
-                filePart
-            )
-
-            if (response.isSuccessful && response.body() != null) {
-                val uploadResult = response.body()!!.toDomain()
-
-                // Update attachment sync status in database
+        // Upload to server (automatic error handling)
+        return apiService.uploadMedia(
+            attachmentIdPart,
+            surveyIdPart,
+            answerUuidPart,
+            filePart
+        ).flatMap { uploadResponse ->
+            // Update attachment sync status in database
+            safeDaoCall(operation = "updateAttachmentSyncStatus") {
                 mediaAttachmentDao.updateAttachmentSyncStatus(
                     attachmentId = attachment.attachmentId,
                     status = SyncStatus.SYNCED.name,
-                    uploadedAt = uploadResult.uploadedAt
+                    uploadedAt = uploadResponse.toDomain().uploadedAt
                 )
-
-                Result.success(uploadResult)
-            } else {
-                Result.failure(
-                    Exception("Media upload failed: HTTP ${response.code()} - ${response.message()}")
-                )
+                uploadResponse.toDomain()
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     /**
      * Get surveys by sync status from local database.
      */
-    override suspend fun getSurveysByStatus(status: SyncStatus): Result<List<Survey>> {
-        return try {
-            val surveys = surveyDao.getSurveysByStatus(status.name)
-                .map { it.toDomain() }
-            Result.success(surveys)
-        } catch (e: Exception) {
-            Result.failure(e)
+    override suspend fun getSurveysByStatus(status: SyncStatus): DomainResult<DomainError, List<Survey>> {
+        return safeDaoCall(operation = "getSurveysByStatus") {
+            surveyDao.getSurveysByStatus(status.name).map { it.toDomain() }
         }
     }
 
     /**
      * Get all pending surveys with full details (including answers).
      */
-    override suspend fun getPendingSurveys(): Result<List<Survey>> {
-        return try {
-            val pendingSurveys = surveyDao.getPendingSurveys()
-                .map { it.toDomain() }
-            Result.success(pendingSurveys)
-        } catch (e: Exception) {
-            Result.failure(e)
+    override suspend fun getPendingSurveys(): DomainResult<DomainError, List<Survey>> {
+        return safeDaoCall(operation = "getPendingSurveys") {
+            surveyDao.getPendingSurveys().map { it.toDomain() }
         }
     }
 
     /**
      * Save a survey locally (offline storage).
      */
-    override suspend fun saveSurvey(survey: Survey): Result<Unit> {
-        return try {
+    override suspend fun saveSurvey(survey: Survey): DomainResult<DomainError, Unit> {
+        return safeDaoCall(operation = "saveSurvey") {
             // Save survey entity
             surveyDao.insertSurvey(survey.toEntity())
 
@@ -161,27 +145,24 @@ class SurveyRepositoryImpl @Inject constructor(
                 answer.toEntity(parentSurveyId = survey.surveyId)
             }
             answerDao.insertAllAnswers(answerEntities)
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     /**
      * Update sync status of a survey.
      */
-    override suspend fun updateSyncStatus(surveyId: String, status: SyncStatus): Result<Unit> {
-        return try {
+    override suspend fun updateSyncStatus(
+        surveyId: String,
+        status: SyncStatus
+    ): DomainResult<DomainError, Unit> {
+        return safeDaoCall(operation = "updateSyncStatus") {
             surveyDao.updateSyncStatus(surveyId, status.name)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     /**
      * Observe surveys by status as a reactive Flow.
+     * Flow does not use DomainResult wrapper - errors are handled via Flow error channels.
      */
     override fun observeSurveysByStatus(status: SyncStatus): Flow<List<Survey>> {
         return surveyDao.observeSurveysByStatus(status.name)
@@ -193,34 +174,28 @@ class SurveyRepositoryImpl @Inject constructor(
     /**
      * Get a specific survey by ID with its answers.
      */
-    override suspend fun getSurveyById(surveyId: String): Result<Survey?> {
-        return try {
-            val fullSurveyDetail = surveyDao.getFullSurveyDetail(surveyId)
-            val survey = fullSurveyDetail?.toDomain()
-            Result.success(survey)
-        } catch (e: Exception) {
-            Result.failure(e)
+    override suspend fun getSurveyById(surveyId: String): DomainResult<DomainError, Survey?> {
+        return safeDaoCall(operation = "getSurveyById") {
+            surveyDao.getFullSurveyDetail(surveyId)?.toDomain()
         }
     }
 
     /**
      * Delete a survey (will cascade delete answers).
      */
-    override suspend fun deleteSurvey(surveyId: String): Result<Unit> {
-        return try {
+    override suspend fun deleteSurvey(surveyId: String): DomainResult<DomainError, Unit> {
+        return safeDaoCall(operation = "deleteSurvey") {
             surveyDao.deleteSurveyById(surveyId)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     /**
      * Clean up synced attachments for a specific survey.
      * Deletes local photo files after successful upload to free up storage.
+     * Combines DAO and file system operations with proper error handling.
      */
-    override suspend fun cleanupSyncedAttachments(surveyId: String): Result<Int> {
-        return try {
+    override suspend fun cleanupSyncedAttachments(surveyId: String): DomainResult<DomainError, Int> {
+        return safeDaoCall(operation = "cleanupSyncedAttachments") {
             // Get all synced attachments for this survey
             val attachments = mediaAttachmentDao.getAttachmentsBySurvey(surveyId)
                 .filter { it.syncStatus == SyncStatus.SYNCED.name && it.uploadedAt != null }
@@ -237,18 +212,17 @@ class SurveyRepositoryImpl @Inject constructor(
                 }
             }
 
-            Result.success(deletedCount)
-        } catch (e: Exception) {
-            Result.failure(e)
+            deletedCount
         }
     }
 
     /**
      * Clean up all synced attachments older than specified timestamp.
      * Useful for periodic cleanup to free up storage on low-end devices.
+     * Combines DAO and file system operations with proper error handling.
      */
-    override suspend fun cleanupOldSyncedAttachments(olderThan: Long): Result<Int> {
-        return try {
+    override suspend fun cleanupOldSyncedAttachments(olderThan: Long): DomainResult<DomainError, Int> {
+        return safeDaoCall(operation = "cleanupOldSyncedAttachments") {
             // Get all synced attachments older than threshold
             val oldAttachments = mediaAttachmentDao.getSyncedAttachmentsOlderThan(olderThan)
 
@@ -264,9 +238,7 @@ class SurveyRepositoryImpl @Inject constructor(
                 }
             }
 
-            Result.success(deletedCount)
-        } catch (e: Exception) {
-            Result.failure(e)
+            deletedCount
         }
     }
 }
