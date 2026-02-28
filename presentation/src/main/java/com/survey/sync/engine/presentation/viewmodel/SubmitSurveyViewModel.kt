@@ -80,7 +80,7 @@ class SubmitSurveyViewModel @Inject constructor(
                     onFailure = { error ->
                         _uiState.value = _uiState.value.copy(
                             isSubmitting = false,
-                            errorMessage = error.message ?: "Failed to save survey"
+                            errorMessage = error.errorMessage
                         )
                     }
                 )

@@ -45,6 +45,13 @@ interface MediaAttachmentDao {
     suspend fun getAttachmentByAnswer(answerUuid: String): MediaAttachmentEntity?
 
     /**
+     * Get a specific attachment by its ID.
+     * Used for deleting attachments along with their local files.
+     */
+    @Query("SELECT * FROM media_attachments WHERE attachmentId = :attachmentId")
+    suspend fun getAttachmentById(attachmentId: String): MediaAttachmentEntity?
+
+    /**
      * Get all pending attachments (not yet uploaded) for a survey.
      */
     @Query("SELECT * FROM media_attachments WHERE parentSurveyId = :surveyId AND syncStatus = 'PENDING'")

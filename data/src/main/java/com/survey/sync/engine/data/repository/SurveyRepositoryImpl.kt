@@ -2,6 +2,7 @@ package com.survey.sync.engine.data.repository
 
 import com.survey.sync.engine.data.dao.AnswerDao
 import com.survey.sync.engine.data.dao.MediaAttachmentDao
+import com.survey.sync.engine.data.dao.QuestionDefinitionDao
 import com.survey.sync.engine.data.dao.SurveyDao
 import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
@@ -10,6 +11,7 @@ import com.survey.sync.engine.data.remote.api.SurveyApiService
 import com.survey.sync.engine.data.util.safeDaoCall
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
+import com.survey.sync.engine.domain.model.InputType
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
 import com.survey.sync.engine.domain.model.Survey
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,6 +40,7 @@ class SurveyRepositoryImpl @Inject constructor(
     private val surveyDao: SurveyDao,
     private val answerDao: AnswerDao,
     private val mediaAttachmentDao: MediaAttachmentDao,
+    private val questionDefinitionDao: QuestionDefinitionDao,
     private val apiService: SurveyApiService
 ) : SurveyRepository {
 
@@ -145,6 +149,44 @@ class SurveyRepositoryImpl @Inject constructor(
                 answer.toEntity(parentSurveyId = survey.surveyId)
             }
             answerDao.insertAllAnswers(answerEntities)
+
+            // Create or update media attachments for PHOTO answers.
+            // Each PHOTO answer's value is treated as the local file path.
+            val photoAttachments = mutableListOf<MediaAttachment>()
+
+            for (answer in survey.answers) {
+                val filePath = answer.answerValue ?: continue
+
+                // Look up question definition to determine input type.
+                val definition = questionDefinitionDao.getQuestionByKey(answer.questionKey)
+                if (definition?.inputType != InputType.PHOTO.name) continue
+
+                // Ensure we only track non-blank file paths.
+                if (filePath.isBlank()) continue
+
+                // Reuse existing attachment if present to keep idempotency.
+                val existing = mediaAttachmentDao.getAttachmentByAnswer(answer.answerUuid)
+
+                val file = File(filePath)
+                val fileSize = if (file.exists()) file.length() else 0L
+
+                val attachment = MediaAttachment(
+                    attachmentId = existing?.attachmentId ?: UUID.randomUUID().toString(),
+                    answerUuid = answer.answerUuid,
+                    localFilePath = filePath,
+                    fileSize = fileSize,
+                    uploadedAt = null,
+                    syncStatus = SyncStatus.PENDING
+                )
+
+                photoAttachments.add(attachment)
+            }
+
+            if (photoAttachments.isNotEmpty()) {
+                val entities =
+                    photoAttachments.map { it.toEntity(parentSurveyId = survey.surveyId) }
+                mediaAttachmentDao.insertAllAttachments(entities)
+            }
         }
     }
 
