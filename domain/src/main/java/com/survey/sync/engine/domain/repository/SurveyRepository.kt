@@ -77,6 +77,29 @@ interface SurveyRepository {
     ): DomainResult<DomainError, Unit>
 
     /**
+     * Increment retry count for a survey.
+     * Used when a sync attempt fails to track retry attempts.
+     *
+     * @param surveyId The survey ID
+     * @return DomainResult indicating success or error details
+     */
+    suspend fun incrementSurveyRetryCount(surveyId: String): DomainResult<DomainError, Unit>
+
+    /**
+     * Mark a survey as permanently failed (non-retryable).
+     * Sets retry count to a high value to exclude it from future sync attempts.
+     * Used for validation errors, authentication failures, or other non-retryable errors.
+     *
+     * @param surveyId The survey ID
+     * @param maxRetries Maximum retry count value to set (ensures survey is excluded from retries)
+     * @return DomainResult indicating success or error details
+     */
+    suspend fun markSurveyAsPermanentlyFailed(
+        surveyId: String,
+        maxRetries: Int = 3
+    ): DomainResult<DomainError, Unit>
+
+    /**
      * Observe surveys by status as a Flow for reactive updates.
      *
      * @param status The sync status to filter by

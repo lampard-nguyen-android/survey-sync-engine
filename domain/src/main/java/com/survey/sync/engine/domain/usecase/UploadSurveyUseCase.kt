@@ -36,18 +36,21 @@ class UploadSurveyUseCase @Inject constructor(
      * 2. If successful, upload media attachments separately (unless skipped)
      * 3. Update sync status based on results
      * 4. Clean up local photo files after successful upload
+     * 5. On failure: increment retry count; surveys are auto-retried until maxRetries is reached
      *
      * @param survey The survey to upload
      * @param mediaAttachments List of media attachments to upload
      * @param cleanupAttachments Whether to delete local photo files after successful upload (default: true)
      * @param skipMedia Skip media uploads to conserve battery/data on weak networks (default: false)
+     * @param maxRetries Maximum number of retry attempts before survey is permanently failed (default: 3)
      * @return DomainResult containing the upload result or error
      */
     suspend operator fun invoke(
         survey: Survey,
         mediaAttachments: List<MediaAttachment> = emptyList(),
         cleanupAttachments: Boolean = true,
-        skipMedia: Boolean = false
+        skipMedia: Boolean = false,
+        maxRetries: Int = 3
     ): DomainResult<DomainError, UploadSurveyResult> {
         // Update status to SYNCING before upload
         repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCING)
@@ -57,8 +60,22 @@ class UploadSurveyUseCase @Inject constructor(
 
         return surveyUploadResult.handle(
             onError = { error ->
-                // Survey upload failed, mark as failed and return
-                repository.updateSyncStatus(survey.surveyId, SyncStatus.FAILED)
+                when {
+                    error.isRetryable -> {
+                        // Retryable error (network, timeout, server error)
+                        // Increment retry count and mark as FAILED
+                        // Survey will be retried on next sync if retryCount < maxRetries
+                        repository.incrementSurveyRetryCount(survey.surveyId)
+                        repository.updateSyncStatus(survey.surveyId, SyncStatus.FAILED)
+                    }
+
+                    else -> {
+                        // Non-retryable error (validation, authentication, business logic)
+                        // Mark as permanently FAILED - sets retryCount = maxRetries
+                        // This prevents any future retry attempts for errors that won't resolve
+                        repository.markSurveyAsPermanentlyFailed(survey.surveyId, maxRetries)
+                    }
+                }
                 DomainResult.error(error)
             },
             onSuccess = { uploadResult ->

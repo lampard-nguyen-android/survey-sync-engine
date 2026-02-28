@@ -9,6 +9,7 @@ import com.survey.sync.engine.data.entity.SurveyEntity
 import com.survey.sync.engine.data.entity.SyncStatusEntity
 import com.survey.sync.engine.data.pojo.FullSurveyDetail
 import kotlinx.coroutines.flow.Flow
+import java.util.Date
 
 /**
  * Data Access Object for Survey operations.
@@ -50,10 +51,17 @@ interface SurveyDao {
     /**
      * Get all pending surveys with full details (including answers and definitions).
      * Used by Sync Engine to build upload payloads.
+     * Includes both PENDING surveys and FAILED surveys that haven't exceeded max retry count.
      */
     @Transaction
-    @Query("SELECT * FROM surveys WHERE syncStatus = 'PENDING' ORDER BY createdAt ASC")
-    suspend fun getPendingSurveys(): List<FullSurveyDetail>
+    @Query(
+        """
+        SELECT * FROM surveys
+        WHERE (syncStatus = 'PENDING' OR (syncStatus = 'FAILED' AND retryCount < :maxRetries))
+        ORDER BY createdAt ASC
+    """
+    )
+    suspend fun getPendingSurveys(maxRetries: Int = 3): List<FullSurveyDetail>
 
     /**
      * Get full survey detail for a specific survey ID.
@@ -79,6 +87,40 @@ interface SurveyDao {
      */
     @Query("SELECT COUNT(*) FROM surveys WHERE syncStatus = :status")
     fun observeCountByStatus(status: SyncStatusEntity): Flow<Int>
+
+    /**
+     * Increment retry count and update last attempt timestamp for a survey.
+     * Used when a sync attempt fails to track retry attempts.
+     */
+    @Query(
+        """
+        UPDATE surveys
+        SET retryCount = retryCount + 1,
+            lastAttemptAt = :attemptTime
+        WHERE surveyId = :surveyId
+    """
+    )
+    suspend fun incrementRetryCount(surveyId: String, attemptTime: Date)
+
+    /**
+     * Update retry-related fields for a survey.
+     * Used to manually set retry count and last attempt time.
+     */
+    @Query(
+        """
+        UPDATE surveys
+        SET retryCount = :retryCount,
+            lastAttemptAt = :lastAttemptAt,
+            syncStatus = :status
+        WHERE surveyId = :surveyId
+    """
+    )
+    suspend fun updateRetryInfo(
+        surveyId: String,
+        retryCount: Int,
+        lastAttemptAt: Date?,
+        status: SyncStatusEntity
+    )
 
     /**
      * Delete a survey by ID (will cascade delete answers due to FK constraint).

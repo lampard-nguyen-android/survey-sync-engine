@@ -41,5 +41,6 @@ data class AnswerEntity(
     val answerValue: String?, // Actual answer value (nullable for unanswered questions)
     val answeredAt: Date, // Timestamp when answer was recorded
     val uploadedAt: Date?, // Timestamp when successfully uploaded (null if not yet uploaded)
-    val syncStatus: SyncStatusEntity // PENDING, SYNCED
+    val syncStatus: SyncStatusEntity, // PENDING, SYNCED
+    val retryCount: Int = 0 // Number of retry attempts for this answer
 )

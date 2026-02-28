@@ -41,5 +41,6 @@ data class MediaAttachmentEntity(
     val localFilePath: String, // Absolute path to photo on device storage
     val fileSize: Long, // Size in bytes for storage management
     val uploadedAt: Date?, // Timestamp when successfully uploaded (null if pending)
-    val syncStatus: SyncStatusEntity // PENDING, SYNCED
+    val syncStatus: SyncStatusEntity, // PENDING, SYNCED
+    val retryCount: Int = 0 // Number of retry attempts for this attachment
 )

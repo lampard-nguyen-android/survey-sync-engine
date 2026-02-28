@@ -11,6 +11,7 @@ import com.survey.sync.engine.domain.model.Answer
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.model.SyncStatus
 import com.survey.sync.engine.domain.model.UploadResult
+import java.util.Date
 
 /**
  * Convert entity SyncStatusEntity to domain SyncStatus.
@@ -45,7 +46,7 @@ fun SurveyEntity.toDomain(): Survey {
         agentId = agentId,
         farmerId = farmerId,
         syncStatus = syncStatus.toDomain(),
-        createdAt = createdAt,
+        createdAt = createdAt.time, // Convert Date to Long (milliseconds)
         answers = emptyList() // Answers loaded separately via FullSurveyDetail
     )
 }
@@ -59,8 +60,8 @@ fun AnswerEntity.toDomain(): Answer {
         questionKey = questionKey,
         instanceIndex = instanceIndex,
         answerValue = answerValue,
-        answeredAt = answeredAt,
-        uploadedAt = uploadedAt,
+        answeredAt = answeredAt.time, // Convert Date to Long (milliseconds)
+        uploadedAt = uploadedAt?.time, // Convert Date? to Long?
         syncStatus = syncStatus.toDomain()
     )
 }
@@ -74,7 +75,7 @@ fun FullSurveyDetail.toDomain(): Survey {
         agentId = survey.agentId,
         farmerId = survey.farmerId,
         syncStatus = survey.syncStatus.toDomain(),
-        createdAt = survey.createdAt,
+        createdAt = survey.createdAt.time, // Convert Date to Long (milliseconds)
         answers = answersWithDefinitions.map { it.answer.toDomain() }
     )
 }
@@ -88,7 +89,9 @@ fun Survey.toEntity(): SurveyEntity {
         agentId = agentId,
         farmerId = farmerId,
         syncStatus = syncStatus.toEntity(),
-        createdAt = createdAt
+        createdAt = Date(createdAt), // Convert Long to Date
+        retryCount = 0, // Default value for new entities
+        lastAttemptAt = null // Default value for new entities
     )
 }
 
@@ -102,9 +105,10 @@ fun Answer.toEntity(parentSurveyId: String): AnswerEntity {
         questionKey = questionKey,
         instanceIndex = instanceIndex,
         answerValue = answerValue,
-        answeredAt = answeredAt,
-        uploadedAt = uploadedAt,
-        syncStatus = syncStatus.toEntity()
+        answeredAt = Date(answeredAt), // Convert Long to Date
+        uploadedAt = uploadedAt?.let { Date(it) }, // Convert Long? to Date?
+        syncStatus = syncStatus.toEntity(),
+        retryCount = 0 // Default value for new entities
     )
 }
 
@@ -143,7 +147,7 @@ fun AnswerEntity.toDto(): AnswerDto {
         questionKey = questionKey,
         instanceIndex = instanceIndex,
         answerValue = answerValue,
-        answeredAt = answeredAt
+        answeredAt = answeredAt.time // Convert Date to Long (milliseconds) for API
     )
 }
 
@@ -155,7 +159,7 @@ fun FullSurveyDetail.toUploadDto(): SurveyUploadDto {
         surveyId = survey.surveyId,
         agentId = survey.agentId,
         farmerId = survey.farmerId,
-        createdAt = survey.createdAt,
+        createdAt = survey.createdAt.time, // Convert Date to Long (milliseconds) for API
         answers = answersWithDefinitions.map { it.answer.toDto() }
     )
 }

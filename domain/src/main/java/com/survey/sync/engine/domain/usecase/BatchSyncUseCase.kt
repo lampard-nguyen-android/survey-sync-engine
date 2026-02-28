@@ -73,17 +73,23 @@ class BatchSyncUseCase @Inject constructor(
      * - Skips media uploads on cellular networks (metered) to conserve data
      * - Stops sync if storage is critical (< 200 MB)
      *
+     * Retry logic:
+     * - Failed surveys are automatically retried on next sync
+     * - Survey is permanently failed after maxRetries attempts
+     *
      * @param networkHealthTracker Optional tracker for monitoring network health during sync.
      *                              If not provided, creates a new one (default threshold: 3 failures).
      * @param networkStatus Current network status (used to optimize media uploads on weak networks).
      * @param deviceResources Current device resources (battery, storage, network type).
      *                        Used for device-aware sync decisions.
+     * @param maxRetries Maximum number of retry attempts before survey is permanently failed (default: 3)
      * @return Detailed results including succeeded, failed, and skipped surveys
      */
     suspend operator fun invoke(
         networkHealthTracker: NetworkHealthTracker = NetworkHealthTracker(),
         networkStatus: NetworkStatus? = null,
-        deviceResources: DeviceResources? = null
+        deviceResources: DeviceResources? = null,
+        maxRetries: Int = 3
     ): DomainResult<DomainError, BatchSyncResult> {
         return try {
             // Get all pending surveys
@@ -153,7 +159,13 @@ class BatchSyncUseCase @Inject constructor(
 
                 // Attempt to sync survey with device-aware optimizations
                 val result =
-                    syncSingleSurvey(survey, networkHealthTracker, networkStatus, deviceResources)
+                    syncSingleSurvey(
+                        survey,
+                        networkHealthTracker,
+                        networkStatus,
+                        deviceResources,
+                        maxRetries
+                    )
                 results[survey.surveyId] = result
 
                 when {
@@ -201,12 +213,15 @@ class BatchSyncUseCase @Inject constructor(
      * - Skips media on weak networks
      * - Skips media on cellular (metered) networks
      * - Skips media if battery < 20% and not charging
+     *
+     * @param maxRetries Maximum number of retry attempts before survey is permanently failed
      */
     private suspend fun syncSingleSurvey(
         survey: Survey,
         networkHealthTracker: NetworkHealthTracker,
         networkStatus: NetworkStatus?,
-        deviceResources: DeviceResources?
+        deviceResources: DeviceResources?,
+        maxRetries: Int
     ): SurveyResult {
         return try {
             // Get media attachments for this survey
@@ -220,7 +235,8 @@ class BatchSyncUseCase @Inject constructor(
                 survey = survey,
                 mediaAttachments = attachments,
                 cleanupAttachments = true,
-                skipMedia = skipMedia
+                skipMedia = skipMedia,
+                maxRetries = maxRetries
             )
 
             uploadResult.handle(

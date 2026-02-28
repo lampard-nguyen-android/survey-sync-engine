@@ -15,5 +15,7 @@ data class SurveyEntity(
     val agentId: String,
     val farmerId: String,
     val syncStatus: SyncStatusEntity, // PENDING, SYNCING, SYNCED, FAILED
-    val createdAt: Date // Timestamp when survey was created
+    val createdAt: Date, // Timestamp when survey was created
+    val retryCount: Int = 0, // Number of retry attempts for this survey
+    val lastAttemptAt: Date? = null // Timestamp of last sync attempt
 )

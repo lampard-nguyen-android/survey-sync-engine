@@ -8,6 +8,7 @@ import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
 import com.survey.sync.engine.data.mapper.toUploadDto
 import com.survey.sync.engine.data.remote.api.SurveyApiService
+import com.survey.sync.engine.data.util.SyncConfig
 import com.survey.sync.engine.data.util.safeDaoCall
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
@@ -124,10 +125,12 @@ class SurveyRepositoryImpl @Inject constructor(
 
     /**
      * Get all pending surveys with full details (including answers).
+     * Includes FAILED surveys that haven't exceeded max retry count.
      */
     override suspend fun getPendingSurveys(): DomainResult<DomainError, List<Survey>> {
         return safeDaoCall(operation = "getPendingSurveys") {
-            surveyDao.getPendingSurveys().map { it.toDomain() }
+            surveyDao.getPendingSurveys(maxRetries = SyncConfig.MAX_RETRY_COUNT)
+                .map { it.toDomain() }
         }
     }
 
@@ -197,6 +200,34 @@ class SurveyRepositoryImpl @Inject constructor(
     ): DomainResult<DomainError, Unit> {
         return safeDaoCall(operation = "updateSyncStatus") {
             surveyDao.updateSyncStatus(surveyId, status.toEntity())
+        }
+    }
+
+    /**
+     * Increment retry count for a survey.
+     * Used when a sync attempt fails to track retry attempts.
+     */
+    override suspend fun incrementSurveyRetryCount(surveyId: String): DomainResult<DomainError, Unit> {
+        return safeDaoCall(operation = "incrementSurveyRetryCount") {
+            surveyDao.incrementRetryCount(surveyId, Date())
+        }
+    }
+
+    /**
+     * Mark a survey as permanently failed (non-retryable).
+     * Sets retry count to maxRetries to exclude from future sync attempts.
+     */
+    override suspend fun markSurveyAsPermanentlyFailed(
+        surveyId: String,
+        maxRetries: Int
+    ): DomainResult<DomainError, Unit> {
+        return safeDaoCall(operation = "markSurveyAsPermanentlyFailed") {
+            surveyDao.updateRetryInfo(
+                surveyId = surveyId,
+                retryCount = maxRetries, // Set to maxRetries to exclude from getPendingSurveys()
+                lastAttemptAt = Date(),
+                status = SyncStatus.FAILED.toEntity()
+            )
         }
     }
 

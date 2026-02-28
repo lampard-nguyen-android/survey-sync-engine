@@ -4,6 +4,7 @@ import com.survey.sync.engine.data.entity.MediaAttachmentEntity
 import com.survey.sync.engine.data.remote.dto.MediaUploadResponseDto
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
+import java.util.Date
 
 /**
  * Extension function to convert MediaAttachmentEntity to Domain MediaAttachment model.
@@ -14,7 +15,7 @@ fun MediaAttachmentEntity.toDomain(): MediaAttachment {
         answerUuid = answerUuid,
         localFilePath = localFilePath,
         fileSize = fileSize,
-        uploadedAt = uploadedAt,
+        uploadedAt = uploadedAt?.time, // Convert Date? to Long? (milliseconds)
         syncStatus = syncStatus.toDomain()
     )
 }
@@ -29,8 +30,9 @@ fun MediaAttachment.toEntity(parentSurveyId: String): MediaAttachmentEntity {
         answerUuid = answerUuid,
         localFilePath = localFilePath,
         fileSize = fileSize,
-        uploadedAt = uploadedAt,
-        syncStatus = syncStatus.toEntity()
+        uploadedAt = uploadedAt?.let { Date(it) }, // Convert Long? to Date?
+        syncStatus = syncStatus.toEntity(),
+        retryCount = 0 // Default value for new entities
     )
 }
 
