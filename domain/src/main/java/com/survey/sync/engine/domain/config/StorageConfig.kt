@@ -1,4 +1,4 @@
-package com.survey.sync.engine.data.util
+package com.survey.sync.engine.domain.config
 
 /**
  * Configuration constants for storage cleanup operations.

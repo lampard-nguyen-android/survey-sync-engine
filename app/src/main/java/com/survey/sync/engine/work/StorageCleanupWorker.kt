@@ -6,7 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.survey.sync.engine.data.manager.DeviceResourceManager
-import com.survey.sync.engine.data.util.StorageConfig
+import com.survey.sync.engine.domain.config.StorageConfig
 import com.survey.sync.engine.domain.usecase.StorageManagementUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject

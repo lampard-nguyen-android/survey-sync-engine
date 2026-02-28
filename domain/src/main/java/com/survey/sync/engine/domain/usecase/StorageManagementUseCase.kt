@@ -1,10 +1,9 @@
 package com.survey.sync.engine.domain.usecase
 
-import com.survey.sync.engine.data.util.StorageConfig
+import com.survey.sync.engine.domain.config.StorageConfig
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.StorageStatus
-import com.survey.sync.engine.domain.repository.SurveyRepository
 import javax.inject.Inject
 
 /**
@@ -26,7 +25,6 @@ import javax.inject.Inject
  * ```
  */
 class StorageManagementUseCase @Inject constructor(
-    private val repository: SurveyRepository,
     private val cleanupOldAttachmentsUseCase: CleanupOldAttachmentsUseCase
 ) {
 

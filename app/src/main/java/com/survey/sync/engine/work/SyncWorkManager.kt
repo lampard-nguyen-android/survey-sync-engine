@@ -12,7 +12,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
-import com.survey.sync.engine.data.util.StorageConfig
+import com.survey.sync.engine.domain.config.StorageConfig
 import com.survey.sync.engine.domain.sync.SyncScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit

@@ -8,8 +8,8 @@ import com.survey.sync.engine.data.mapper.toDomain
 import com.survey.sync.engine.data.mapper.toEntity
 import com.survey.sync.engine.data.mapper.toUploadDto
 import com.survey.sync.engine.data.remote.api.SurveyApiService
-import com.survey.sync.engine.data.util.SyncConfig
 import com.survey.sync.engine.data.util.safeDaoCall
+import com.survey.sync.engine.domain.config.SyncConfig
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.InputType
