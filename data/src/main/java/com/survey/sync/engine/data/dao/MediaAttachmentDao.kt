@@ -5,6 +5,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.survey.sync.engine.data.entity.MediaAttachmentEntity
+import com.survey.sync.engine.data.entity.SyncStatusEntity
+import java.util.Date
 
 /**
  * Data Access Object for MediaAttachment operations.
@@ -61,19 +63,27 @@ interface MediaAttachmentDao {
      * Get synced attachments older than a specific timestamp for cleanup.
      */
     @Query("SELECT * FROM media_attachments WHERE syncStatus = 'SYNCED' AND uploadedAt IS NOT NULL AND uploadedAt < :olderThan")
-    suspend fun getSyncedAttachmentsOlderThan(olderThan: Long): List<MediaAttachmentEntity>
+    suspend fun getSyncedAttachmentsOlderThan(olderThan: Date): List<MediaAttachmentEntity>
 
     /**
      * Update sync status of an attachment after upload.
      */
     @Query("UPDATE media_attachments SET syncStatus = :status, uploadedAt = :uploadedAt WHERE attachmentId = :attachmentId")
-    suspend fun updateAttachmentSyncStatus(attachmentId: String, status: String, uploadedAt: Long?)
+    suspend fun updateAttachmentSyncStatus(
+        attachmentId: String,
+        status: SyncStatusEntity,
+        uploadedAt: Date?
+    )
 
     /**
      * Update sync status for all attachments of a survey.
      */
     @Query("UPDATE media_attachments SET syncStatus = :status, uploadedAt = :uploadedAt WHERE parentSurveyId = :surveyId")
-    suspend fun updateAllAttachmentsSyncStatus(surveyId: String, status: String, uploadedAt: Long?)
+    suspend fun updateAllAttachmentsSyncStatus(
+        surveyId: String,
+        status: SyncStatusEntity,
+        uploadedAt: Date?
+    )
 
     /**
      * Get total size of attachments for a survey.

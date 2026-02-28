@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.Date
 
 /**
  * Entity for tracking media attachments (photos) stored locally.
@@ -39,6 +40,6 @@ data class MediaAttachmentEntity(
     val answerUuid: String, // FK to AnswerEntity (the answer with inputType = PHOTO)
     val localFilePath: String, // Absolute path to photo on device storage
     val fileSize: Long, // Size in bytes for storage management
-    val uploadedAt: Long?, // Timestamp when successfully uploaded (null if pending)
-    val syncStatus: String // PENDING, SYNCED
+    val uploadedAt: Date?, // Timestamp when successfully uploaded (null if pending)
+    val syncStatus: SyncStatusEntity // PENDING, SYNCED
 )

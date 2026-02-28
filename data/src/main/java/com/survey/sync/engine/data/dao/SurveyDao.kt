@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import com.survey.sync.engine.data.entity.SurveyEntity
+import com.survey.sync.engine.data.entity.SyncStatusEntity
 import com.survey.sync.engine.data.pojo.FullSurveyDetail
 import kotlinx.coroutines.flow.Flow
 
@@ -32,13 +33,13 @@ interface SurveyDao {
      * Get surveys by sync status (e.g., PENDING, SYNCED, FAILED).
      */
     @Query("SELECT * FROM surveys WHERE syncStatus = :status ORDER BY createdAt DESC")
-    suspend fun getSurveysByStatus(status: String): List<SurveyEntity>
+    suspend fun getSurveysByStatus(status: SyncStatusEntity): List<SurveyEntity>
 
     /**
      * Get surveys by sync status as Flow for reactive updates.
      */
     @Query("SELECT * FROM surveys WHERE syncStatus = :status ORDER BY createdAt DESC")
-    fun observeSurveysByStatus(status: String): Flow<List<SurveyEntity>>
+    fun observeSurveysByStatus(status: SyncStatusEntity): Flow<List<SurveyEntity>>
 
     /**
      * Get a single survey by ID.
@@ -65,19 +66,19 @@ interface SurveyDao {
      * Update sync status of a survey.
      */
     @Query("UPDATE surveys SET syncStatus = :status WHERE surveyId = :surveyId")
-    suspend fun updateSyncStatus(surveyId: String, status: String)
+    suspend fun updateSyncStatus(surveyId: String, status: SyncStatusEntity)
 
     /**
      * Get count of surveys by status.
      */
     @Query("SELECT COUNT(*) FROM surveys WHERE syncStatus = :status")
-    suspend fun getCountByStatus(status: String): Int
+    suspend fun getCountByStatus(status: SyncStatusEntity): Int
 
     /**
      * Get count of surveys by status as Flow.
      */
     @Query("SELECT COUNT(*) FROM surveys WHERE syncStatus = :status")
-    fun observeCountByStatus(status: String): Flow<Int>
+    fun observeCountByStatus(status: SyncStatusEntity): Flow<Int>
 
     /**
      * Delete a survey by ID (will cascade delete answers due to FK constraint).

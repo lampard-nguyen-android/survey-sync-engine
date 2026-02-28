@@ -24,6 +24,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -104,8 +105,8 @@ class SurveyRepositoryImpl @Inject constructor(
             safeDaoCall(operation = "updateAttachmentSyncStatus") {
                 mediaAttachmentDao.updateAttachmentSyncStatus(
                     attachmentId = attachment.attachmentId,
-                    status = SyncStatus.SYNCED.name,
-                    uploadedAt = uploadResponse.uploadedAt
+                    status = SyncStatus.SYNCED.toEntity(),
+                    uploadedAt = uploadResponse.uploadedAt?.let { Date(it) }
                 )
                 uploadResponse.toDomain()
             }
@@ -117,7 +118,7 @@ class SurveyRepositoryImpl @Inject constructor(
      */
     override suspend fun getSurveysByStatus(status: SyncStatus): DomainResult<DomainError, List<Survey>> {
         return safeDaoCall(operation = "getSurveysByStatus") {
-            surveyDao.getSurveysByStatus(status.name).map { it.toDomain() }
+            surveyDao.getSurveysByStatus(status.toEntity()).map { it.toDomain() }
         }
     }
 
@@ -195,7 +196,7 @@ class SurveyRepositoryImpl @Inject constructor(
         status: SyncStatus
     ): DomainResult<DomainError, Unit> {
         return safeDaoCall(operation = "updateSyncStatus") {
-            surveyDao.updateSyncStatus(surveyId, status.name)
+            surveyDao.updateSyncStatus(surveyId, status.toEntity())
         }
     }
 
@@ -204,7 +205,7 @@ class SurveyRepositoryImpl @Inject constructor(
      * Flow does not use DomainResult wrapper - errors are handled via Flow error channels.
      */
     override fun observeSurveysByStatus(status: SyncStatus): Flow<List<Survey>> {
-        return surveyDao.observeSurveysByStatus(status.name)
+        return surveyDao.observeSurveysByStatus(status.toEntity())
             .map { surveys ->
                 surveys.map { it.toDomain() }
             }
@@ -247,9 +248,9 @@ class SurveyRepositoryImpl @Inject constructor(
         daysOld: Int
     ): DomainResult<DomainError, List<MediaAttachment>> {
         return safeDaoCall(operation = "getOldestSyncedAttachments") {
-            val thresholdTimestamp = System.currentTimeMillis() - (daysOld * 24 * 60 * 60 * 1000L)
+            val thresholdDate = Date(System.currentTimeMillis() - (daysOld * 24 * 60 * 60 * 1000L))
             val attachmentEntities =
-                mediaAttachmentDao.getSyncedAttachmentsOlderThan(thresholdTimestamp)
+                mediaAttachmentDao.getSyncedAttachmentsOlderThan(thresholdDate)
                     .take(limit)
             attachmentEntities.map { it.toDomain() }
         }
@@ -293,7 +294,7 @@ class SurveyRepositoryImpl @Inject constructor(
         return safeDaoCall(operation = "cleanupSyncedAttachments") {
             // Get all synced attachments for this survey
             val attachments = mediaAttachmentDao.getAttachmentsBySurvey(surveyId)
-                .filter { it.syncStatus == SyncStatus.SYNCED.name && it.uploadedAt != null }
+                .filter { it.syncStatus == SyncStatus.SYNCED.toEntity() && it.uploadedAt != null }
 
             var deletedCount = 0
 
@@ -319,7 +320,7 @@ class SurveyRepositoryImpl @Inject constructor(
     override suspend fun cleanupOldSyncedAttachments(olderThan: Long): DomainResult<DomainError, Int> {
         return safeDaoCall(operation = "cleanupOldSyncedAttachments") {
             // Get all synced attachments older than threshold
-            val oldAttachments = mediaAttachmentDao.getSyncedAttachmentsOlderThan(olderThan)
+            val oldAttachments = mediaAttachmentDao.getSyncedAttachmentsOlderThan(Date(olderThan))
 
             var deletedCount = 0
 

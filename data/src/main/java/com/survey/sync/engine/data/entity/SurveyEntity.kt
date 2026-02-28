@@ -2,6 +2,7 @@ package com.survey.sync.engine.data.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.Date
 
 /**
  * Represents a survey session with sync tracking.
@@ -13,6 +14,6 @@ data class SurveyEntity(
     val surveyId: String, // UUID
     val agentId: String,
     val farmerId: String,
-    val syncStatus: String, // PENDING, SYNCING, SYNCED, FAILED
-    val createdAt: Long // Timestamp in milliseconds
+    val syncStatus: SyncStatusEntity, // PENDING, SYNCING, SYNCED, FAILED
+    val createdAt: Date // Timestamp when survey was created
 )

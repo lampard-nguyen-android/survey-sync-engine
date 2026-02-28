@@ -4,7 +4,6 @@ import com.survey.sync.engine.data.entity.MediaAttachmentEntity
 import com.survey.sync.engine.data.remote.dto.MediaUploadResponseDto
 import com.survey.sync.engine.domain.model.MediaAttachment
 import com.survey.sync.engine.domain.model.MediaUploadResult
-import com.survey.sync.engine.domain.model.SyncStatus
 
 /**
  * Extension function to convert MediaAttachmentEntity to Domain MediaAttachment model.
@@ -16,7 +15,7 @@ fun MediaAttachmentEntity.toDomain(): MediaAttachment {
         localFilePath = localFilePath,
         fileSize = fileSize,
         uploadedAt = uploadedAt,
-        syncStatus = SyncStatus.valueOf(syncStatus)
+        syncStatus = syncStatus.toDomain()
     )
 }
 
@@ -31,7 +30,7 @@ fun MediaAttachment.toEntity(parentSurveyId: String): MediaAttachmentEntity {
         localFilePath = localFilePath,
         fileSize = fileSize,
         uploadedAt = uploadedAt,
-        syncStatus = syncStatus.name
+        syncStatus = syncStatus.toEntity()
     )
 }
 

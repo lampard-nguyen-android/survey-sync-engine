@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.Date
 
 /**
  * Individual answer data with relationships to survey and question definition.
@@ -38,7 +39,7 @@ data class AnswerEntity(
     val questionKey: String, // FK to QuestionDefinitionEntity
     val instanceIndex: Int, // 0 for general questions, 1+ for repeating sections (e.g., Farm 1, Farm 2)
     val answerValue: String?, // Actual answer value (nullable for unanswered questions)
-    val answeredAt: Long, // Timestamp when answer was recorded
-    val uploadedAt: Long?, // Timestamp when successfully uploaded (null if not yet uploaded)
-    val syncStatus: String // PENDING, SYNCED
+    val answeredAt: Date, // Timestamp when answer was recorded
+    val uploadedAt: Date?, // Timestamp when successfully uploaded (null if not yet uploaded)
+    val syncStatus: SyncStatusEntity // PENDING, SYNCED
 )

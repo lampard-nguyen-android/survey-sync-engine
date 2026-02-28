@@ -2,6 +2,7 @@ package com.survey.sync.engine.data.mapper
 
 import com.survey.sync.engine.data.entity.AnswerEntity
 import com.survey.sync.engine.data.entity.SurveyEntity
+import com.survey.sync.engine.data.entity.SyncStatusEntity
 import com.survey.sync.engine.data.pojo.FullSurveyDetail
 import com.survey.sync.engine.data.remote.dto.AnswerDto
 import com.survey.sync.engine.data.remote.dto.SurveyUploadDto
@@ -12,6 +13,30 @@ import com.survey.sync.engine.domain.model.SyncStatus
 import com.survey.sync.engine.domain.model.UploadResult
 
 /**
+ * Convert entity SyncStatusEntity to domain SyncStatus.
+ */
+fun SyncStatusEntity.toDomain(): SyncStatus {
+    return when (this) {
+        SyncStatusEntity.PENDING -> SyncStatus.PENDING
+        SyncStatusEntity.SYNCING -> SyncStatus.SYNCING
+        SyncStatusEntity.SYNCED -> SyncStatus.SYNCED
+        SyncStatusEntity.FAILED -> SyncStatus.FAILED
+    }
+}
+
+/**
+ * Convert domain SyncStatus to entity SyncStatusEntity.
+ */
+fun SyncStatus.toEntity(): SyncStatusEntity {
+    return when (this) {
+        SyncStatus.PENDING -> SyncStatusEntity.PENDING
+        SyncStatus.SYNCING -> SyncStatusEntity.SYNCING
+        SyncStatus.SYNCED -> SyncStatusEntity.SYNCED
+        SyncStatus.FAILED -> SyncStatusEntity.FAILED
+    }
+}
+
+/**
  * Extension function to convert SurveyEntity to Domain Survey model.
  */
 fun SurveyEntity.toDomain(): Survey {
@@ -19,7 +44,7 @@ fun SurveyEntity.toDomain(): Survey {
         surveyId = surveyId,
         agentId = agentId,
         farmerId = farmerId,
-        syncStatus = SyncStatus.valueOf(syncStatus),
+        syncStatus = syncStatus.toDomain(),
         createdAt = createdAt,
         answers = emptyList() // Answers loaded separately via FullSurveyDetail
     )
@@ -36,7 +61,7 @@ fun AnswerEntity.toDomain(): Answer {
         answerValue = answerValue,
         answeredAt = answeredAt,
         uploadedAt = uploadedAt,
-        syncStatus = SyncStatus.valueOf(syncStatus)
+        syncStatus = syncStatus.toDomain()
     )
 }
 
@@ -48,7 +73,7 @@ fun FullSurveyDetail.toDomain(): Survey {
         surveyId = survey.surveyId,
         agentId = survey.agentId,
         farmerId = survey.farmerId,
-        syncStatus = SyncStatus.valueOf(survey.syncStatus),
+        syncStatus = survey.syncStatus.toDomain(),
         createdAt = survey.createdAt,
         answers = answersWithDefinitions.map { it.answer.toDomain() }
     )
@@ -62,7 +87,7 @@ fun Survey.toEntity(): SurveyEntity {
         surveyId = surveyId,
         agentId = agentId,
         farmerId = farmerId,
-        syncStatus = syncStatus.name,
+        syncStatus = syncStatus.toEntity(),
         createdAt = createdAt
     )
 }
@@ -79,7 +104,7 @@ fun Answer.toEntity(parentSurveyId: String): AnswerEntity {
         answerValue = answerValue,
         answeredAt = answeredAt,
         uploadedAt = uploadedAt,
-        syncStatus = syncStatus.name
+        syncStatus = syncStatus.toEntity()
     )
 }
 
