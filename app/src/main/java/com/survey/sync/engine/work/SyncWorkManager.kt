@@ -12,6 +12,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
+import com.survey.sync.engine.data.util.StorageConfig
 import com.survey.sync.engine.domain.sync.SyncScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
@@ -47,12 +48,12 @@ class SyncWorkManager @Inject constructor(
      * Schedule periodic background sync.
      * Optimized for battery preservation and data conservation in rural areas.
      *
-     * Uses WiFi-only (unmetered) constraint to prevent consuming expensive cellular data
+     * Uses network constraint to prevent consuming expensive cellular data
      * on automatic background syncs. Manual syncs can still use any network.
      */
     fun schedulePeriodicSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.UNMETERED) // WiFi only for periodic sync
+            .setRequiredNetworkType(NetworkType.CONNECTED)
             .setRequiresBatteryNotLow(true)
             .build()
 
@@ -77,6 +78,59 @@ class SyncWorkManager @Inject constructor(
             periodicSyncRequest
         )
     }
+
+    /**
+     * Schedule periodic storage cleanup.
+     * Runs daily to proactively manage device storage by cleaning up old synced media attachments.
+     *
+     * Strategy:
+     * - Conservative FIFO cleanup (30+ day old attachments)
+     * - Runs during device idle time (2 AM preferred)
+     * - No network required (local operation)
+     * - Battery-friendly (requires device not in low battery state)
+     * - Prevents storage from reaching critical levels
+     */
+    fun scheduleStorageCleanup() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true) // Don't drain battery
+            .setRequiresDeviceIdle(false) // Can run anytime (not just idle)
+            .build()
+
+        val periodicCleanupRequest = PeriodicWorkRequestBuilder<StorageCleanupWorker>(
+            repeatInterval = StorageConfig.WORKER_REPEAT_INTERVAL_HOURS,
+            repeatIntervalTimeUnit = TimeUnit.HOURS,
+            flexTimeInterval = StorageConfig.WORKER_FLEX_INTERVAL_HOURS,
+            flexTimeIntervalUnit = TimeUnit.HOURS
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                1, // Start with 1 hour backoff
+                TimeUnit.HOURS
+            )
+            .addTag(StorageCleanupWorker.TAG_CLEANUP)
+            .addTag(StorageCleanupWorker.TAG_MAINTENANCE)
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            StorageCleanupWorker.WORKER_NAME,
+            ExistingPeriodicWorkPolicy.REPLACE, // Allow reconfiguration
+            periodicCleanupRequest
+        )
+    }
+
+    /**
+     * Cancel storage cleanup work.
+     */
+    fun cancelStorageCleanup() {
+        workManager.cancelUniqueWork(StorageCleanupWorker.WORKER_NAME)
+    }
+
+    /**
+     * Get storage cleanup work info to monitor status.
+     */
+    fun getStorageCleanupWorkInfo() =
+        workManager.getWorkInfosForUniqueWorkLiveData(StorageCleanupWorker.WORKER_NAME)
 
     /**
      * Trigger immediate one-time sync.

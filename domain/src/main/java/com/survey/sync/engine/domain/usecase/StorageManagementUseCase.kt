@@ -1,5 +1,6 @@
 package com.survey.sync.engine.domain.usecase
 
+import com.survey.sync.engine.data.util.StorageConfig
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.model.StorageStatus
@@ -108,7 +109,13 @@ class StorageManagementUseCase @Inject constructor(
     }
 
     /**
-     * Perform cleanup in stages until storage is acceptable
+     * Perform cleanup in stages until storage is acceptable.
+     * Uses different age thresholds based on cleanup reason for optimized cleanup:
+     * - SCHEDULED: 30 days (conservative, routine maintenance)
+     * - LOW_STORAGE: 14 days (moderate, preventive cleanup)
+     * - ALMOST_FULL: 7 days (aggressive, proactive cleanup)
+     * - CRITICAL_STORAGE: 7→3→1 days (very aggressive, emergency cleanup)
+     * - MANUAL: User-initiated (follows same logic as needed)
      */
     private suspend fun performProgressiveCleanup(
         initialStorage: StorageStatus,
@@ -118,39 +125,75 @@ class StorageManagementUseCase @Inject constructor(
         var totalFreed = 0L
         var currentStorage = initialStorage
 
-        // Stage 1: Delete attachments older than 7 days
-        if (currentStorage.isCritical || !currentStorage.hasEnoughSpace) {
-            println("StorageManagement: Stage 1 - Deleting attachments > 7 days old")
-            val stage1 = cleanupOldAttachments(daysOld = 7)
-            totalDeleted += stage1.deletedCount
-            totalFreed += stage1.estimatedFreedBytes
+        // Determine cleanup strategy based on reason
+        when (reason) {
+            CleanupReason.SCHEDULED -> {
+                // Conservative: Only delete very old attachments during routine maintenance
+                println("StorageManagement: Scheduled cleanup - Deleting attachments > ${StorageConfig.SCHEDULED_CLEANUP_AGE_DAYS} days old")
+                val result =
+                    cleanupOldAttachments(daysOld = StorageConfig.SCHEDULED_CLEANUP_AGE_DAYS)
+                totalDeleted += result.deletedCount
+                totalFreed += result.estimatedFreedBytes
+            }
 
-            // Re-check storage (simulated - in production, re-query)
-            currentStorage = StorageStatus(
-                availableBytes = currentStorage.availableBytes + stage1.estimatedFreedBytes,
-                totalBytes = currentStorage.totalBytes
-            )
-        }
+            CleanupReason.LOW_STORAGE -> {
+                // Moderate: Delete older attachments to free up space
+                println("StorageManagement: Low storage cleanup - Deleting attachments > ${StorageConfig.LOW_STORAGE_CLEANUP_AGE_DAYS} days old")
+                val result =
+                    cleanupOldAttachments(daysOld = StorageConfig.LOW_STORAGE_CLEANUP_AGE_DAYS)
+                totalDeleted += result.deletedCount
+                totalFreed += result.estimatedFreedBytes
+            }
 
-        // Stage 2: Delete attachments older than 3 days (if still low)
-        if (currentStorage.isCritical) {
-            println("StorageManagement: Stage 2 - Deleting attachments > 3 days old")
-            val stage2 = cleanupOldAttachments(daysOld = 3)
-            totalDeleted += stage2.deletedCount
-            totalFreed += stage2.estimatedFreedBytes
+            CleanupReason.ALMOST_FULL -> {
+                // Aggressive: Delete recent-ish attachments to prevent critical state
+                println("StorageManagement: Almost full cleanup - Deleting attachments > ${StorageConfig.ALMOST_FULL_CLEANUP_AGE_DAYS} days old")
+                val result =
+                    cleanupOldAttachments(daysOld = StorageConfig.ALMOST_FULL_CLEANUP_AGE_DAYS)
+                totalDeleted += result.deletedCount
+                totalFreed += result.estimatedFreedBytes
+            }
 
-            currentStorage = StorageStatus(
-                availableBytes = currentStorage.availableBytes + stage2.estimatedFreedBytes,
-                totalBytes = currentStorage.totalBytes
-            )
-        }
+            CleanupReason.CRITICAL_STORAGE, CleanupReason.MANUAL -> {
+                // Very aggressive: Progressive cleanup stages for critical situations
+                // Stage 1: Delete attachments older than 7 days
+                if (currentStorage.isCritical || !currentStorage.hasEnoughSpace) {
+                    println("StorageManagement: Stage 1 - Deleting attachments > ${StorageConfig.CRITICAL_STAGE_1_DAYS} days old")
+                    val stage1 =
+                        cleanupOldAttachments(daysOld = StorageConfig.CRITICAL_STAGE_1_DAYS)
+                    totalDeleted += stage1.deletedCount
+                    totalFreed += stage1.estimatedFreedBytes
 
-        // Stage 3: Delete attachments older than 1 day (emergency only)
-        if (currentStorage.isCritical && currentStorage.availableBytes < StorageStatus.MINIMAL_STORAGE_BYTES) {
-            println("StorageManagement: Stage 3 (Emergency) - Deleting attachments > 1 day old")
-            val stage3 = cleanupOldAttachments(daysOld = 1)
-            totalDeleted += stage3.deletedCount
-            totalFreed += stage3.estimatedFreedBytes
+                    // Re-check storage (simulated - in production, re-query)
+                    currentStorage = StorageStatus(
+                        availableBytes = currentStorage.availableBytes + stage1.estimatedFreedBytes,
+                        totalBytes = currentStorage.totalBytes
+                    )
+                }
+
+                // Stage 2: Delete attachments older than 3 days (if still low)
+                if (currentStorage.isCritical) {
+                    println("StorageManagement: Stage 2 - Deleting attachments > ${StorageConfig.CRITICAL_STAGE_2_DAYS} days old")
+                    val stage2 =
+                        cleanupOldAttachments(daysOld = StorageConfig.CRITICAL_STAGE_2_DAYS)
+                    totalDeleted += stage2.deletedCount
+                    totalFreed += stage2.estimatedFreedBytes
+
+                    currentStorage = StorageStatus(
+                        availableBytes = currentStorage.availableBytes + stage2.estimatedFreedBytes,
+                        totalBytes = currentStorage.totalBytes
+                    )
+                }
+
+                // Stage 3: Delete attachments older than 1 day (emergency only)
+                if (currentStorage.isCritical && currentStorage.availableBytes < StorageStatus.MINIMAL_STORAGE_BYTES) {
+                    println("StorageManagement: Stage 3 (Emergency) - Deleting attachments > ${StorageConfig.CRITICAL_STAGE_3_DAYS} day old")
+                    val stage3 =
+                        cleanupOldAttachments(daysOld = StorageConfig.CRITICAL_STAGE_3_DAYS)
+                    totalDeleted += stage3.deletedCount
+                    totalFreed += stage3.estimatedFreedBytes
+                }
+            }
         }
 
         return CleanupResult(

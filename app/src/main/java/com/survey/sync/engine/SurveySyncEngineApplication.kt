@@ -35,16 +35,21 @@ class SurveySyncEngineApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Schedule periodic background sync
-        // This addresses Scenario 1: When agent reaches connectivity,
-        // the sync engine will automatically detect pending surveys
-        syncWorkManager.schedulePeriodicSync()
-
         // Monitor network status & device resources
         connectivityManager.startConnectivityListener()
 
         // Device resources
         deviceResourceManager.startMonitoring()
+
+        // Schedule periodic background sync
+        // This addresses Scenario 1: When agent reaches connectivity,
+        // the sync engine will automatically detect pending surveys
+        syncWorkManager.schedulePeriodicSync()
+
+        // Schedule periodic storage cleanup
+        // Runs daily to proactively manage device storage by cleaning up
+        // old synced media attachments, preventing storage from reaching critical levels
+        syncWorkManager.scheduleStorageCleanup()
     }
 
     /**
