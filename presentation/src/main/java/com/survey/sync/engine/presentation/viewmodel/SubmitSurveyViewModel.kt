@@ -66,7 +66,7 @@ class SubmitSurveyViewModel @Inject constructor(
                     photoCount = _uiState.value.photoCount
                 )
 
-                saveSurveyUseCase(survey).fold(
+                saveSurveyUseCase(survey).handle(
                     onSuccess = {
                         _uiState.value = _uiState.value.copy(
                             isSubmitting = false,
@@ -77,7 +77,7 @@ class SubmitSurveyViewModel @Inject constructor(
                             }..."
                         )
                     },
-                    onFailure = { error ->
+                    onError = { error ->
                         _uiState.value = _uiState.value.copy(
                             isSubmitting = false,
                             errorMessage = error.errorMessage

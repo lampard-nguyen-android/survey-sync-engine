@@ -4,7 +4,6 @@ import com.squareup.moshi.JsonDataException
 import com.squareup.moshi.JsonEncodingException
 import com.squareup.moshi.Moshi
 import com.survey.sync.engine.domain.error.DomainError
-import com.survey.sync.engine.domain.error.DomainResult
 import com.survey.sync.engine.domain.error.OfflineException
 import com.survey.sync.engine.domain.error.SurveyServerError
 import retrofit2.HttpException
@@ -14,66 +13,6 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
-
-/**
- * Network error mapper for SurveySyncEngine.
- *
- * Wraps survey upload API calls and automatically maps exceptions to SyncError.
- * This addresses all network failure scenarios for field survey sync:
- * - Device offline (no internet at all)
- * - Connection timeout (slow network in rural areas)
- * - Request timeout (large survey data on slow connection)
- * - Server errors (400, 500 status codes)
- * - Unexpected exceptions (JSON parsing, null pointer, etc.)
- *
- * Usage in repository:
- * ```kotlin
- * override suspend fun uploadSurvey(data: SurveyUploadDto): ApiResult<SyncError, UploadResponse> =
- *     safeApiCall(moshi) {
- *         apiService.uploadSurvey(data).also { response ->
- *             if (!response.isSuccessful) throw HttpException(response)
- *         }.body()!!
- *     }
- * ```
- */
-
-/**
- * Wrap synchronous survey API calls with error mapping.
- * Converts all exceptions to SyncError for consistent handling.
- *
- * @param moshi Moshi instance for parsing server error responses
- * @param block The API call to execute
- * @return ApiResult.Success with result or ApiResult.Error with mapped SyncError
- */
-inline fun <T> safeApiCall(
-    moshi: Moshi? = null,
-    block: () -> T
-): DomainResult<DomainError, T> {
-    return try {
-        DomainResult.success(block())
-    } catch (e: Exception) {
-        DomainResult.error(e.toSyncError(moshi))
-    }
-}
-
-/**
- * Wrap asynchronous (suspend) survey API calls with error mapping.
- * Use this for most Retrofit calls which are suspend functions.
- *
- * @param moshi Moshi instance for parsing server error responses
- * @param block The suspend API call to execute
- * @return ApiResult.Success with result or ApiResult.Error with mapped SyncError
- */
-suspend inline fun <T> safeSuspendApiCall(
-    moshi: Moshi? = null,
-    crossinline block: suspend () -> T
-): DomainResult<DomainError, T> {
-    return try {
-        DomainResult.success(block())
-    } catch (e: Exception) {
-        DomainResult.error(e.toSyncError(moshi))
-    }
-}
 
 /**
  * Convert any exception to appropriate SyncError type.

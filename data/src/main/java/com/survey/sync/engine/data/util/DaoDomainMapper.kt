@@ -63,39 +63,6 @@ suspend fun <T> safeDaoCall(
 }
 
 /**
- * Wraps a non-suspend DAO operation in DomainResult with automatic exception mapping.
- *
- * Use this for blocking DAO operations (rare, most should be suspend).
- *
- * @param operation Description of the operation
- * @param block The DAO operation to execute
- * @return DomainResult.Success with the operation result, or DomainResult.Error with DaoError
- *
- * Example:
- * ```kotlin
- * fun getSurveyCountSync(): DomainResult<DomainError, Int> =
- *     safeDaoCallBlocking(operation = "getSurveyCount") {
- *         surveyDao.getSurveyCountSync()
- *     }
- * ```
- */
-fun <T> safeDaoCallBlocking(
-    operation: String,
-    block: () -> T
-): DomainResult<DomainError, T> {
-    return try {
-        val result = block()
-        DomainResult.success(result)
-    } catch (e: Exception) {
-        val error = DomainError.DaoError(
-            throwable = e,
-            operation = operation
-        )
-        DomainResult.error(error)
-    }
-}
-
-/**
  * Gets a user-friendly message for database errors.
  *
  * @return User-friendly error message appropriate for displaying in the UI

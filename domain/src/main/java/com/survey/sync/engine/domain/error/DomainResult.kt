@@ -72,40 +72,12 @@ sealed class DomainResult<out E : DomainError, out V> {
      * @return Result of the handler function
      */
     inline fun <R> handle(
-        onError: (E) -> R,
-        onSuccess: (V) -> R
-    ): R = when (this) {
-        is Error -> onError(error)
-        is Success -> onSuccess(value)
-    }
-
-    /**
-     * Fold this result into a single value by applying one of two functions.
-     * Similar to Kotlin's Result.fold for consistency with standard library.
-     *
-     * This is an alias for [handle] that follows Kotlin's naming convention.
-     *
-     * Example:
-     * ```kotlin
-     * val result: DomainResult<SyncError, UploadResult> = repository.uploadSurvey(survey)
-     * val message = result.fold(
-     *     onSuccess = { "Upload succeeded: ${it.surveyId}" },
-     *     onFailure = { error -> "Upload failed: ${error.errorMessage}" }
-     * )
-     * ```
-     *
-     * @param onSuccess Handler for successful survey sync
-     * @param onFailure Handler for sync errors (network, API, internal)
-     * @return Result of the handler function
-     */
-    inline fun <R> fold(
         onSuccess: (V) -> R,
-        onFailure: (E) -> R
+        onError: (E) -> R,
     ): R = when (this) {
         is Success -> onSuccess(value)
-        is Error -> onFailure(error)
+        is Error -> onError(error)
     }
-
     /**
      * Transform the success value while preserving errors.
      * Useful for converting DTOs to domain models after successful upload.
@@ -256,29 +228,3 @@ fun <V> success(value: V): DomainResult<Nothing, V> = DomainResult.Success(value
  * Create failed ApiResult for survey sync.
  */
 fun <E : DomainError> error(error: E): DomainResult<E, Nothing> = DomainResult.Error(error)
-
-/**
- * Convert Kotlin Result to ApiResult.
- * Bridges standard library Result with SurveySyncEngine ApiResult.
- */
-fun <V> Result<V>.toApiResult(): DomainResult<DomainError, V> =
-    fold(
-        onSuccess = { DomainResult.Success(it) },
-        onFailure = {
-            DomainResult.Error(
-                DomainError.InternalError(
-                    it as? Exception ?: Exception(it.message)
-                )
-            )
-        }
-    )
-
-/**
- * Convert ApiResult to Kotlin Result.
- * Useful when interfacing with standard library APIs.
- */
-fun <V> DomainResult<DomainError, V>.toResult(): Result<V> =
-    handle(
-        onError = { Result.failure(Exception(it.errorMessage)) },
-        onSuccess = { Result.success(it) }
-    )

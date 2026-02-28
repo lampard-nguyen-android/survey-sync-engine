@@ -232,7 +232,7 @@ class BatchSyncUseCase @Inject constructor(
                         surveyId = survey.surveyId,
                         isSuccess = false,
                         errorMessage = if (isNetworkFailure) {
-                            "Network error: ${error}"
+                            "Network error: $error"
                         } else {
                             error.toString()
                         }

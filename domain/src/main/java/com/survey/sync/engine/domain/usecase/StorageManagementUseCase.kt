@@ -166,7 +166,7 @@ class StorageManagementUseCase @Inject constructor(
     private suspend fun cleanupOldAttachments(daysOld: Int): CleanupStageResult {
         val result = cleanupOldAttachmentsUseCase(daysOld = daysOld)
 
-        return result.fold(
+        return result.handle(
             onSuccess = { count ->
                 // Estimate freed space (average 300 KB per attachment after compression)
                 val estimatedBytes = count * 300L * 1024
@@ -175,7 +175,7 @@ class StorageManagementUseCase @Inject constructor(
                     estimatedFreedBytes = estimatedBytes
                 )
             },
-            onFailure = {
+            onError = {
                 println("StorageManagement: Cleanup stage failed for $daysOld days: $it")
                 CleanupStageResult(deletedCount = 0, estimatedFreedBytes = 0)
             }

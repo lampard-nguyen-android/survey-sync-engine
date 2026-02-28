@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.survey.sync.engine.data.entity.MediaAttachmentEntity
-import kotlinx.coroutines.flow.Flow
 
 /**
  * Data Access Object for MediaAttachment operations.
@@ -31,12 +30,6 @@ interface MediaAttachmentDao {
      */
     @Query("SELECT * FROM media_attachments WHERE parentSurveyId = :surveyId ORDER BY attachmentId")
     suspend fun getAttachmentsBySurvey(surveyId: String): List<MediaAttachmentEntity>
-
-    /**
-     * Get all attachments for a specific survey as Flow.
-     */
-    @Query("SELECT * FROM media_attachments WHERE parentSurveyId = :surveyId ORDER BY attachmentId")
-    fun observeAttachmentsBySurvey(surveyId: String): Flow<List<MediaAttachmentEntity>>
 
     /**
      * Get attachment for a specific answer (photo answers).

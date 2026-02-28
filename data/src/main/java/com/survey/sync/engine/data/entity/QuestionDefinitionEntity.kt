@@ -16,5 +16,4 @@ data class QuestionDefinitionEntity(
     val inputType: String, // TEXT, NUMBER, GPS, PHOTO
     val labelText: String, // Display label for UI
     val sortOrder: Int, // Order within section
-    val validationRules: String? // JSON string containing validation rules
 )

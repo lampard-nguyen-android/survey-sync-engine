@@ -65,7 +65,7 @@ class SurveySyncWorker @AssistedInject constructor(
             // Execute batch sync with network health monitoring and device resources
             val syncResult = batchSyncUseCase(networkHealthTracker, networkStatus, deviceResources)
 
-            syncResult.fold(
+            syncResult.handle(
                 onSuccess = { batchResult ->
                     Timber.i(
                         "SurveySyncWorker: Sync completed. " +
@@ -124,7 +124,7 @@ class SurveySyncWorker @AssistedInject constructor(
                         }
                     }
                 },
-                onFailure = { error ->
+                onError = { error ->
                     // Complete failure - retry with backoff
                     Timber.e("SurveySyncWorker: Sync failed with error: $error")
 

@@ -39,17 +39,17 @@ class SurveyListViewModel @Inject constructor(
                 selectedFilter = status
             )
 
-            getSurveysByStatusUseCase(status).fold(
+            getSurveysByStatusUseCase(status).handle(
                 onSuccess = { surveys ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         surveys = surveys
                     )
                 },
-                onFailure = { error ->
+                onError = { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        errorMessage = error.message ?: "Failed to load surveys"
+                        errorMessage = error.errorMessage
                     )
                 }
             )

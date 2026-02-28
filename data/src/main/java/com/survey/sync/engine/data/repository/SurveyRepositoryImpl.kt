@@ -21,6 +21,8 @@ import com.survey.sync.engine.domain.repository.SurveyRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -75,10 +77,8 @@ class SurveyRepositoryImpl @Inject constructor(
         }
 
         // Create multipart request body
-        val requestFile = okhttp3.RequestBody.create(
-            "image/jpeg".toMediaTypeOrNull(),
-            photoFile
-        )
+        val requestFile = photoFile
+            .asRequestBody("image/jpeg".toMediaTypeOrNull())
         val filePart = okhttp3.MultipartBody.Part.createFormData(
             "file",
             photoFile.name,
@@ -86,18 +86,12 @@ class SurveyRepositoryImpl @Inject constructor(
         )
 
         // Create text parts
-        val attachmentIdPart = okhttp3.RequestBody.create(
-            "text/plain".toMediaTypeOrNull(),
-            attachment.attachmentId
-        )
-        val surveyIdPart = okhttp3.RequestBody.create(
-            "text/plain".toMediaTypeOrNull(),
-            surveyId
-        )
-        val answerUuidPart = okhttp3.RequestBody.create(
-            "text/plain".toMediaTypeOrNull(),
-            attachment.answerUuid
-        )
+        val attachmentIdPart = attachment.attachmentId
+            .toRequestBody("text/plain".toMediaTypeOrNull())
+        val surveyIdPart = surveyId
+            .toRequestBody("text/plain".toMediaTypeOrNull())
+        val answerUuidPart = attachment.answerUuid
+            .toRequestBody("text/plain".toMediaTypeOrNull())
 
         // Upload to server (automatic error handling)
         return apiService.uploadMedia(
@@ -111,7 +105,7 @@ class SurveyRepositoryImpl @Inject constructor(
                 mediaAttachmentDao.updateAttachmentSyncStatus(
                     attachmentId = attachment.attachmentId,
                     status = SyncStatus.SYNCED.name,
-                    uploadedAt = uploadResponse.toDomain().uploadedAt
+                    uploadedAt = uploadResponse.uploadedAt
                 )
                 uploadResponse.toDomain()
             }
@@ -170,16 +164,19 @@ class SurveyRepositoryImpl @Inject constructor(
                 val file = File(filePath)
                 val fileSize = if (file.exists()) file.length() else 0L
 
-                val attachment = MediaAttachment(
-                    attachmentId = existing?.attachmentId ?: UUID.randomUUID().toString(),
-                    answerUuid = answer.answerUuid,
-                    localFilePath = filePath,
-                    fileSize = fileSize,
-                    uploadedAt = null,
-                    syncStatus = SyncStatus.PENDING
-                )
+                if (fileSize > 0L) {
+                    val attachment = MediaAttachment(
+                        attachmentId = existing?.attachmentId ?: UUID.randomUUID().toString(),
+                        answerUuid = answer.answerUuid,
+                        localFilePath = filePath,
+                        fileSize = fileSize,
+                        uploadedAt = null,
+                        syncStatus = SyncStatus.PENDING
+                    )
 
-                photoAttachments.add(attachment)
+                    photoAttachments.add(attachment)
+                }
+
             }
 
             if (photoAttachments.isNotEmpty()) {
