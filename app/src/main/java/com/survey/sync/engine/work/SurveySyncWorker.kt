@@ -6,22 +6,24 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.survey.sync.engine.data.manager.ConnectivityManager
+import com.survey.sync.engine.data.manager.DeviceResourceManager
 import com.survey.sync.engine.domain.network.NetworkHealthTracker
 import com.survey.sync.engine.domain.network.NetworkStatus
 import com.survey.sync.engine.domain.usecase.BatchSyncUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.flow.first
 import timber.log.Timber
 
 /**
  * WorkManager worker for background sync of pending surveys.
  *
- * Addresses Scenario 1 & 2 + Network Quality Monitoring:
+ * Addresses Scenario 1 & 2 + Network Quality Monitoring + Device-Aware Optimizations:
  * - Syncs pending surveys when connectivity is available
  * - Monitors network quality in real-time during sync
  * - Implements circuit breaker to detect network-down scenarios
  * - Stops early when network likely down (conserves battery & data)
+ * - Device-aware sync: Checks battery, storage, and network type
+ * - Skips media uploads on cellular networks or low battery
  * - Handles partial failures (successful surveys not re-uploaded)
  * - Returns detailed results about successes/failures/skipped
  * - Uses exponential backoff for retries
@@ -31,28 +33,37 @@ class SurveySyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val batchSyncUseCase: BatchSyncUseCase,
-    private val connectivityManager: ConnectivityManager
+    private val connectivityManager: ConnectivityManager,
+    private val deviceResourceManager: DeviceResourceManager
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         return try {
             // Check network status before starting
-            val networkStatus = connectivityManager.networkStatusFlow.first()
+            val networkStatus = connectivityManager.networkStatusFlow.value
 
             if (networkStatus == NetworkStatus.Unavailable) {
                 Timber.w("SurveySyncWorker: Network unavailable, skipping sync")
                 return Result.retry() // Retry when network becomes available
             }
 
-            Timber.d("SurveySyncWorker: Starting sync with network status: $networkStatus")
+            // Get current device resources for device-aware sync
+            val deviceResources = deviceResourceManager.currentResources
+
+            Timber.d(
+                "SurveySyncWorker: Starting sync - " +
+                        "Network: $networkStatus (${deviceResources.network}), " +
+                        "Battery: ${deviceResources.battery.level}% ${if (deviceResources.battery.isCharging) "(charging)" else ""}, " +
+                        "Storage: ${deviceResources.storage.availableMB} MB free"
+            )
 
             // Create network health tracker for this sync session
             val networkHealthTracker = NetworkHealthTracker(
                 consecutiveFailureThreshold = CIRCUIT_BREAKER_THRESHOLD
             )
 
-            // Execute batch sync with network health monitoring
-            val syncResult = batchSyncUseCase(networkHealthTracker, networkStatus)
+            // Execute batch sync with network health monitoring and device resources
+            val syncResult = batchSyncUseCase(networkHealthTracker, networkStatus, deviceResources)
 
             syncResult.fold(
                 onSuccess = { batchResult ->
@@ -90,6 +101,18 @@ class SurveySyncWorker @AssistedInject constructor(
                         BatchSyncUseCase.StopReason.NETWORK_UNAVAILABLE -> {
                             // Network became unavailable - retry when available
                             Timber.w("SurveySyncWorker: Network unavailable, will retry later")
+                            Result.retry()
+                        }
+
+                        BatchSyncUseCase.StopReason.STORAGE_CRITICAL -> {
+                            // Storage critical - retry later (hopefully after cleanup)
+                            Timber.w("SurveySyncWorker: Storage critical, will retry after cleanup")
+                            Result.retry()
+                        }
+
+                        BatchSyncUseCase.StopReason.BATTERY_LOW -> {
+                            // Battery low - retry when charging or battery improves
+                            Timber.w("SurveySyncWorker: Battery too low, will retry later")
                             Result.retry()
                         }
 

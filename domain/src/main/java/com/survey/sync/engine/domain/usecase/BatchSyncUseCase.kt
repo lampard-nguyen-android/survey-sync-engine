@@ -2,6 +2,7 @@ package com.survey.sync.engine.domain.usecase
 
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
+import com.survey.sync.engine.domain.model.DeviceResources
 import com.survey.sync.engine.domain.model.Survey
 import com.survey.sync.engine.domain.network.HealthStatus
 import com.survey.sync.engine.domain.network.NetworkHealthTracker
@@ -28,7 +29,8 @@ class BatchSyncUseCase @Inject constructor(
         COMPLETED,              // All surveys processed successfully
         NETWORK_DOWN,           // Network likely down (circuit breaker opened)
         NETWORK_UNAVAILABLE,    // Network became unavailable during sync
-        BATTERY_LOW,            // Battery constraints no longer met
+        BATTERY_LOW,            // Battery too low to continue sync
+        STORAGE_CRITICAL,       // Storage too low to continue
         CANCELLED               // Sync was cancelled
     }
 
@@ -62,17 +64,26 @@ class BatchSyncUseCase @Inject constructor(
     )
 
     /**
-     * Sync all pending surveys with network health monitoring.
+     * Sync all pending surveys with network health monitoring and device-aware optimizations.
      * Implements circuit breaker pattern to detect network-down scenarios and stop early.
+     *
+     * Device-aware optimizations:
+     * - Skips media uploads if battery < 20% and not charging
+     * - Skips media uploads on weak networks to conserve battery/data
+     * - Skips media uploads on cellular networks (metered) to conserve data
+     * - Stops sync if storage is critical (< 200 MB)
      *
      * @param networkHealthTracker Optional tracker for monitoring network health during sync.
      *                              If not provided, creates a new one (default threshold: 3 failures).
      * @param networkStatus Current network status (used to optimize media uploads on weak networks).
+     * @param deviceResources Current device resources (battery, storage, network type).
+     *                        Used for device-aware sync decisions.
      * @return Detailed results including succeeded, failed, and skipped surveys
      */
     suspend operator fun invoke(
         networkHealthTracker: NetworkHealthTracker = NetworkHealthTracker(),
-        networkStatus: NetworkStatus? = null
+        networkStatus: NetworkStatus? = null,
+        deviceResources: DeviceResources? = null
     ): DomainResult<DomainError, BatchSyncResult> {
         return try {
             // Get all pending surveys
@@ -108,6 +119,22 @@ class BatchSyncUseCase @Inject constructor(
             var stopReason = StopReason.COMPLETED
 
             for (survey in pendingSurveys) {
+                // Check storage before each upload - stop if critical
+                if (deviceResources != null && deviceResources.storage.isCritical) {
+                    // Storage critical - stop sync to prevent device issues
+                    val skippedResult = SurveyResult(
+                        surveyId = survey.surveyId,
+                        isSuccess = false,
+                        isSkipped = true,
+                        errorMessage = "Skipped: Storage critical (${deviceResources.storage.availableMB} MB free)"
+                    )
+                    results[survey.surveyId] = skippedResult
+                    skippedIds.add(survey.surveyId)
+                    skippedCount++
+                    stopReason = StopReason.STORAGE_CRITICAL
+                    continue
+                }
+
                 // Check network health before each upload (circuit breaker pattern)
                 if (!networkHealthTracker.shouldContinueSync) {
                     // Network likely down - stop early to conserve battery and data
@@ -124,8 +151,9 @@ class BatchSyncUseCase @Inject constructor(
                     continue
                 }
 
-                // Attempt to sync survey
-                val result = syncSingleSurvey(survey, networkHealthTracker, networkStatus)
+                // Attempt to sync survey with device-aware optimizations
+                val result =
+                    syncSingleSurvey(survey, networkHealthTracker, networkStatus, deviceResources)
                 results[survey.surveyId] = result
 
                 when {
@@ -169,22 +197,25 @@ class BatchSyncUseCase @Inject constructor(
      * Sync a single survey with its media attachments.
      * Handles partial media upload failures gracefully.
      * Reports failures to network health tracker for circuit breaker logic.
-     * Skips media uploads on weak networks to conserve battery and data.
+     * Implements device-aware media upload optimizations:
+     * - Skips media on weak networks
+     * - Skips media on cellular (metered) networks
+     * - Skips media if battery < 20% and not charging
      */
     private suspend fun syncSingleSurvey(
         survey: Survey,
         networkHealthTracker: NetworkHealthTracker,
-        networkStatus: NetworkStatus?
+        networkStatus: NetworkStatus?,
+        deviceResources: DeviceResources?
     ): SurveyResult {
         return try {
             // Get media attachments for this survey
             val attachments = getMediaAttachmentsUseCase(survey.surveyId).getOrNull() ?: emptyList()
 
-            // Determine if media should be skipped based on network quality
-            // Skip media on weak networks to conserve battery and data
-            val skipMedia = networkStatus == NetworkStatus.Weak
+            // Determine if media should be skipped based on device resources
+            val skipMedia = shouldSkipMedia(networkStatus, deviceResources)
 
-            // Upload survey with attachments (or skip media if network is weak)
+            // Upload survey with attachments (or skip media based on device conditions)
             val uploadResult = uploadSurveyUseCase(
                 survey = survey,
                 mediaAttachments = attachments,
@@ -232,5 +263,45 @@ class BatchSyncUseCase @Inject constructor(
                 errorMessage = e.message ?: "Unexpected error"
             )
         }
+    }
+
+    /**
+     * Determine if media uploads should be skipped based on device resources.
+     * Conserves battery and data by skipping media in suboptimal conditions.
+     *
+     * Skips media if:
+     * - Network is weak (low bandwidth)
+     * - Network is cellular (metered/expensive data)
+     * - Battery < 20% and not charging (conserve power)
+     *
+     * @param networkStatus Current network status
+     * @param deviceResources Current device resources
+     * @return true if media should be skipped, false otherwise
+     */
+    private fun shouldSkipMedia(
+        networkStatus: NetworkStatus?,
+        deviceResources: DeviceResources?
+    ): Boolean {
+        // Skip media on weak networks to conserve battery and data
+        if (networkStatus == NetworkStatus.Weak) {
+            return true
+        }
+
+        // If no device resources provided, use legacy behavior (only check network status)
+        if (deviceResources == null) {
+            return false
+        }
+
+        // Skip media on cellular networks to conserve metered data
+        if (!deviceResources.network.isGoodForMediaUpload) {
+            return true
+        }
+
+        // Skip media if battery is low and not charging
+        if (!deviceResources.battery.isGoodForSync) {
+            return true
+        }
+
+        return false
     }
 }

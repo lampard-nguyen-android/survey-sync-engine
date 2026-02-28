@@ -1,5 +1,10 @@
 package com.survey.sync.engine.data.util
 
+import android.database.sqlite.SQLiteConstraintException
+import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.database.sqlite.SQLiteDatabaseLockedException
+import android.database.sqlite.SQLiteDiskIOException
+import android.database.sqlite.SQLiteFullException
 import com.survey.sync.engine.domain.error.DomainError
 import com.survey.sync.engine.domain.error.DomainResult
 
@@ -96,12 +101,12 @@ fun <T> safeDaoCallBlocking(
  * @return User-friendly error message appropriate for displaying in the UI
  */
 fun DomainError.DaoError.getUserMessage(): String {
-    return when (throwable::class.simpleName) {
-        "SQLiteDiskIOException" -> "Temporary storage error. Please try again."
-        "SQLiteDatabaseLockedException" -> "Database is busy. Please try again."
-        "SQLiteFullException" -> "Storage full. Please free up space on your device."
-        "SQLiteConstraintException" -> "Invalid data. Please check your input."
-        "SQLiteDatabaseCorruptException" -> "Database error. Please contact support."
+    return when (throwable) {
+        is SQLiteDiskIOException -> "Temporary storage error. Please try again."
+        is SQLiteDatabaseLockedException -> "Database is busy. Please try again."
+        is SQLiteFullException -> "Storage full. Please free up space on your device."
+        is SQLiteConstraintException -> "Invalid data. Please check your input."
+        is SQLiteDatabaseCorruptException -> "Database error. Please contact support."
         else -> "Database error during $operation. Please try again."
     }
 }

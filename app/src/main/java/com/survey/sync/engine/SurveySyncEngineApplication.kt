@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.survey.sync.engine.data.manager.ConnectivityManager
+import com.survey.sync.engine.data.manager.DeviceResourceManager
 import com.survey.sync.engine.work.SyncWorkManager
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -28,6 +29,9 @@ class SurveySyncEngineApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var connectivityManager: ConnectivityManager
 
+    @Inject
+    lateinit var deviceResourceManager: DeviceResourceManager
+
     override fun onCreate() {
         super.onCreate()
 
@@ -36,8 +40,11 @@ class SurveySyncEngineApplication : Application(), Configuration.Provider {
         // the sync engine will automatically detect pending surveys
         syncWorkManager.schedulePeriodicSync()
 
-        // Monitor network status
+        // Monitor network status & device resources
         connectivityManager.startConnectivityListener()
+
+        // Device resources
+        deviceResourceManager.startMonitoring()
     }
 
     /**

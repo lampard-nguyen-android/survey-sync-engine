@@ -62,6 +62,9 @@ dependencies {
     // Logging
     implementation(libs.timber)
 
+    // Image Processing
+    implementation(libs.androidx.exifinterface)
+
     // Debugging
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.no.op)

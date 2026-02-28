@@ -19,18 +19,6 @@ class GetMediaAttachmentsUseCase @Inject constructor(
      * @return DomainResult containing list of media attachments or error
      */
     suspend operator fun invoke(surveyId: String): DomainResult<DomainError, List<MediaAttachment>> {
-        // Get the survey with its answers, then extract attachments
-        return repository.getSurveyById(surveyId).handle(
-            onError = { DomainResult.error(it) },
-            onSuccess = { survey ->
-                if (survey == null) {
-                    DomainResult.success(emptyList())
-                } else {
-                    // For now, return empty list as we don't have direct attachment access
-                    // This would need repository method enhancement
-                    DomainResult.success(emptyList())
-                }
-            }
-        )
+        return repository.getMediaAttachments(surveyId)
     }
 }

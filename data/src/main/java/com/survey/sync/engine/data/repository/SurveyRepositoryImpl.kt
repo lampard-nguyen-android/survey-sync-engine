@@ -190,6 +190,62 @@ class SurveyRepositoryImpl @Inject constructor(
     }
 
     /**
+     * Get all media attachments for a specific survey.
+     */
+    override suspend fun getMediaAttachments(surveyId: String): DomainResult<DomainError, List<MediaAttachment>> {
+        return safeDaoCall(operation = "getMediaAttachments") {
+            val attachmentEntities = mediaAttachmentDao.getAttachmentsBySurvey(surveyId)
+            attachmentEntities.map { it.toDomain() }
+        }
+    }
+
+    /**
+     * Get oldest synced attachments for cleanup purposes.
+     * Used by StorageManagementUseCase to progressively free up space.
+     */
+    override suspend fun getOldestSyncedAttachments(
+        limit: Int,
+        daysOld: Int
+    ): DomainResult<DomainError, List<MediaAttachment>> {
+        return safeDaoCall(operation = "getOldestSyncedAttachments") {
+            val thresholdTimestamp = System.currentTimeMillis() - (daysOld * 24 * 60 * 60 * 1000L)
+            val attachmentEntities =
+                mediaAttachmentDao.getSyncedAttachmentsOlderThan(thresholdTimestamp)
+                    .take(limit)
+            attachmentEntities.map { it.toDomain() }
+        }
+    }
+
+    /**
+     * Delete multiple attachments by their IDs.
+     * Deletes both files and database records.
+     */
+    override suspend fun deleteAttachmentsByIds(attachmentIds: List<String>): DomainResult<DomainError, Int> {
+        return safeDaoCall(operation = "deleteAttachmentsByIds") {
+            var deletedCount = 0
+
+            attachmentIds.forEach { attachmentId ->
+                // Get attachment to find file path
+                val attachment = mediaAttachmentDao.getAttachmentById(attachmentId)
+
+                if (attachment != null) {
+                    // Delete file from local storage
+                    val file = File(attachment.localFilePath)
+                    val fileDeleted = if (file.exists()) file.delete() else true
+
+                    if (fileDeleted) {
+                        // Remove attachment record from database
+                        mediaAttachmentDao.deleteAttachmentById(attachmentId)
+                        deletedCount++
+                    }
+                }
+            }
+
+            deletedCount
+        }
+    }
+
+    /**
      * Clean up synced attachments for a specific survey.
      * Deletes local photo files after successful upload to free up storage.
      * Combines DAO and file system operations with proper error handling.

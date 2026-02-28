@@ -45,11 +45,14 @@ class SyncWorkManager @Inject constructor(
 
     /**
      * Schedule periodic background sync.
-     * Optimized for battery preservation in rural areas.
+     * Optimized for battery preservation and data conservation in rural areas.
+     *
+     * Uses WiFi-only (unmetered) constraint to prevent consuming expensive cellular data
+     * on automatic background syncs. Manual syncs can still use any network.
      */
     fun schedulePeriodicSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(NetworkType.UNMETERED) // WiFi only for periodic sync
             .setRequiresBatteryNotLow(true)
             .build()
 

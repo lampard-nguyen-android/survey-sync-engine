@@ -101,6 +101,34 @@ interface SurveyRepository {
     suspend fun deleteSurvey(surveyId: String): DomainResult<DomainError, Unit>
 
     /**
+     * Get all media attachments for a specific survey.
+     *
+     * @param surveyId The survey ID
+     * @return DomainResult containing list of media attachments or error details
+     */
+    suspend fun getMediaAttachments(surveyId: String): DomainResult<DomainError, List<MediaAttachment>>
+
+    /**
+     * Get oldest synced attachments for cleanup.
+     *
+     * @param limit Maximum number of attachments to return
+     * @param daysOld Minimum age in days
+     * @return DomainResult containing list of old attachments or error details
+     */
+    suspend fun getOldestSyncedAttachments(
+        limit: Int = 100,
+        daysOld: Int = 7
+    ): DomainResult<DomainError, List<MediaAttachment>>
+
+    /**
+     * Delete multiple attachments by their IDs.
+     *
+     * @param attachmentIds List of attachment IDs to delete
+     * @return DomainResult containing number of files deleted or error details
+     */
+    suspend fun deleteAttachmentsByIds(attachmentIds: List<String>): DomainResult<DomainError, Int>
+
+    /**
      * Clean up synced attachments (delete local files after successful upload).
      * This should be called after a successful survey upload.
      *
