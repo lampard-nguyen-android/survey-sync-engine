@@ -61,6 +61,8 @@ dependencies {
     implementation(libs.hilt.work)
     kapt(libs.hilt.compiler)
 
+    // Logging
+    implementation(libs.timber)
     // Navigation (needed for SurveySyncEngineNavigation composable)
     implementation(libs.navigation.compose)
     

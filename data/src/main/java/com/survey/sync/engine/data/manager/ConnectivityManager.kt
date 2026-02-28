@@ -1,4 +1,4 @@
-package com.survey.sync.engine.work
+package com.survey.sync.engine.data.manager
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -7,6 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import com.survey.sync.engine.domain.network.NetworkStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,10 +66,4 @@ class ConnectivityManager @Inject constructor(
             connectivityManager.registerNetworkCallback(request, networkCallback!!)
         }
     }
-}
-
-sealed class NetworkStatus {
-    object Available : NetworkStatus()
-    object Weak : NetworkStatus()
-    object Unavailable : NetworkStatus()
 }

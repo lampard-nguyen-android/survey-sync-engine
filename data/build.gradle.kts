@@ -58,7 +58,10 @@ dependencies {
     implementation(libs.moshi)
     implementation(libs.moshi.kotlin)
     kapt(libs.moshi.codegen)
-    
+
+    // Logging
+    implementation(libs.timber)
+
     // Debugging
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.no.op)

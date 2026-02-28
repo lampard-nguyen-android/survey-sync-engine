@@ -20,6 +20,7 @@ chucker = "4.0.0"
 coroutines = "1.8.0"
 androidLibrary = "8.7.1"
 workManager = "2.9.0"
+timber = "5.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -76,6 +77,9 @@ hilt-work = { group = "androidx.hilt", name = "hilt-work", version = "1.1.0" }
 # Debugging
 chucker = { group = "com.github.chuckerteam.chucker", name = "library", version.ref = "chucker" }
 chucker-no-op = { group = "com.github.chuckerteam.chucker", name = "library-no-op", version.ref = "chucker" }
+
+# Logging
+timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -25,6 +25,7 @@ class UploadSurveyUseCase @Inject constructor(
         val surveyUploadResult: UploadResult,
         val mediaUploadSuccessCount: Int,
         val mediaUploadFailureCount: Int,
+        val mediaSkippedCount: Int = 0,
         val totalMediaCount: Int
     )
 
@@ -32,19 +33,21 @@ class UploadSurveyUseCase @Inject constructor(
      * Upload a survey and its media attachments to the server.
      * Process:
      * 1. Upload survey data (text answers)
-     * 2. If successful, upload media attachments separately
+     * 2. If successful, upload media attachments separately (unless skipped)
      * 3. Update sync status based on results
      * 4. Clean up local photo files after successful upload
      *
      * @param survey The survey to upload
      * @param mediaAttachments List of media attachments to upload
      * @param cleanupAttachments Whether to delete local photo files after successful upload (default: true)
+     * @param skipMedia Skip media uploads to conserve battery/data on weak networks (default: false)
      * @return DomainResult containing the upload result or error
      */
     suspend operator fun invoke(
         survey: Survey,
         mediaAttachments: List<MediaAttachment> = emptyList(),
-        cleanupAttachments: Boolean = true
+        cleanupAttachments: Boolean = true,
+        skipMedia: Boolean = false
     ): DomainResult<DomainError, UploadSurveyResult> {
         // Update status to SYNCING before upload
         repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCING)
@@ -62,20 +65,27 @@ class UploadSurveyUseCase @Inject constructor(
                 // Step 2: Upload media attachments if survey upload succeeded
                 var mediaSuccessCount = 0
                 var mediaFailureCount = 0
+                var mediaSkippedCount = 0
 
                 if (mediaAttachments.isNotEmpty()) {
-                    val mediaResults = uploadMediaAttachmentsUseCase.invoke(
-                        surveyId = survey.surveyId,
-                        attachments = mediaAttachments
-                    )
+                    if (skipMedia) {
+                        // Skip media uploads to conserve battery and data on weak networks
+                        // Media will remain PENDING and be retried when network improves
+                        mediaSkippedCount = mediaAttachments.size
+                    } else {
+                        val mediaResults = uploadMediaAttachmentsUseCase.invoke(
+                            surveyId = survey.surveyId,
+                            attachments = mediaAttachments
+                        )
 
-                    mediaSuccessCount = mediaResults.values.count { it.isSuccess }
-                    mediaFailureCount = mediaResults.values.count { it.isError }
+                        mediaSuccessCount = mediaResults.values.count { it.isSuccess }
+                        mediaFailureCount = mediaResults.values.count { it.isError }
+                    }
                 }
 
                 // Step 3: Update sync status
                 // Mark as SYNCED if survey uploaded successfully
-                // (Media failures don't prevent survey from being marked as synced)
+                // (Media failures/skips don't prevent survey from being marked as synced)
                 repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCED)
 
                 // Step 4: Clean up successfully uploaded attachments
@@ -89,6 +99,7 @@ class UploadSurveyUseCase @Inject constructor(
                         surveyUploadResult = uploadResult,
                         mediaUploadSuccessCount = mediaSuccessCount,
                         mediaUploadFailureCount = mediaFailureCount,
+                        mediaSkippedCount = mediaSkippedCount,
                         totalMediaCount = mediaAttachments.size
                     )
                 )

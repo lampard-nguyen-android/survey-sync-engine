@@ -80,6 +80,33 @@ sealed class DomainResult<out E : DomainError, out V> {
     }
 
     /**
+     * Fold this result into a single value by applying one of two functions.
+     * Similar to Kotlin's Result.fold for consistency with standard library.
+     *
+     * This is an alias for [handle] that follows Kotlin's naming convention.
+     *
+     * Example:
+     * ```kotlin
+     * val result: DomainResult<SyncError, UploadResult> = repository.uploadSurvey(survey)
+     * val message = result.fold(
+     *     onSuccess = { "Upload succeeded: ${it.surveyId}" },
+     *     onFailure = { error -> "Upload failed: ${error.errorMessage}" }
+     * )
+     * ```
+     *
+     * @param onSuccess Handler for successful survey sync
+     * @param onFailure Handler for sync errors (network, API, internal)
+     * @return Result of the handler function
+     */
+    inline fun <R> fold(
+        onSuccess: (V) -> R,
+        onFailure: (E) -> R
+    ): R = when (this) {
+        is Success -> onSuccess(value)
+        is Error -> onFailure(error)
+    }
+
+    /**
      * Transform the success value while preserving errors.
      * Useful for converting DTOs to domain models after successful upload.
      *
