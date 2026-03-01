@@ -68,8 +68,15 @@ dependencies {
     // Debugging
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.no.op)
-    
+
+    // Testing
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.core.testing) // For InstantTaskExecutorRule
+    testImplementation(libs.robolectric) // For Android framework classes
+
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
