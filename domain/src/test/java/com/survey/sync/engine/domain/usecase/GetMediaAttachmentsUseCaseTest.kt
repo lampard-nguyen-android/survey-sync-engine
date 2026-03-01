@@ -196,7 +196,7 @@ class GetMediaAttachmentsUseCaseTest {
     fun `invoke returns DaoError when database query fails`() = runTest {
         // Given: Database error
         val surveyId = "survey-1"
-        val daoError = createDaoError(operation = "query", message = "Database locked")
+        val daoError = createDaoError(operation = "query", throwable = Throwable("Database locked"))
 
         whenever(repository.getMediaAttachments(surveyId))
             .thenReturn(domainError(daoError))
@@ -209,7 +209,7 @@ class GetMediaAttachmentsUseCaseTest {
         val error = (result as DomainResult.Error).error
         assertTrue(error is DomainError.DaoError)
         assertEquals("query", (error as DomainError.DaoError).operation)
-        assertEquals("Database locked", error.errorMessage)
+        assertEquals("Database error during query: Database locked", error.errorMessage)
     }
 
     @Test

@@ -286,11 +286,15 @@ class SurveyRepositoryImplTest {
 
     @Test
     fun `saveSurvey creates media attachments for PHOTO answers`() = runTest {
-        // Given: Survey with PHOTO answer
+        // Given: Survey with PHOTO answer and a real temp file
+        val tempFile = java.io.File.createTempFile("test_photo", ".jpg")
+        tempFile.writeText("fake photo content")
+        tempFile.deleteOnExit()
+
         val photoAnswer = createAnswer(
             answerUuid = "answer-1",
             questionKey = "farm_photo",
-            answerValue = "/storage/photo.jpg"
+            answerValue = tempFile.absolutePath
         )
         val survey = createSurvey(
             surveyId = "survey-1",
@@ -322,10 +326,14 @@ class SurveyRepositoryImplTest {
     @Test
     fun `saveSurvey reuses existing media attachment for PHOTO answers`() = runTest {
         // Given: Survey with PHOTO answer and existing attachment
+        val tempFile = java.io.File.createTempFile("test_photo", ".jpg")
+        tempFile.writeText("fake photo content")
+        tempFile.deleteOnExit()
+
         val photoAnswer = createAnswer(
             answerUuid = "answer-1",
             questionKey = "farm_photo",
-            answerValue = "/storage/photo.jpg"
+            answerValue = tempFile.absolutePath
         )
         val survey = createSurvey(
             surveyId = "survey-1",
@@ -450,10 +458,10 @@ class SurveyRepositoryImplTest {
         // Then: Success
         assertTrue(result is DomainResult.Success)
         verify(surveyDao).updateRetryInfo(
-            surveyId = surveyId,
-            retryCount = maxRetries,
+            surveyId = eq(surveyId),
+            retryCount = eq(maxRetries),
             lastAttemptAt = any<Date>(),
-            status = SyncStatusEntity.FAILED
+            status = eq(SyncStatusEntity.FAILED)
         )
     }
 
@@ -467,10 +475,10 @@ class SurveyRepositoryImplTest {
 
         // Then: Correct retry count set
         verify(surveyDao).updateRetryInfo(
-            surveyId = surveyId,
-            retryCount = 5,
+            surveyId = eq(surveyId),
+            retryCount = eq(5),
             lastAttemptAt = any<Date>(),
-            status = SyncStatusEntity.FAILED
+            status = eq(SyncStatusEntity.FAILED)
         )
     }
 
@@ -672,18 +680,29 @@ class SurveyRepositoryImplTest {
 
     @Test
     fun `cleanupSyncedAttachments deletes synced attachments for survey`() = runTest {
-        // Given: Survey with synced attachments
+        // Given: Survey with synced attachments and real temp files
         val surveyId = "survey-1"
+
+        val tempFile1 = java.io.File.createTempFile("att-1", ".jpg")
+        tempFile1.writeText("photo content 1")
+        tempFile1.deleteOnExit()
+
+        val tempFile2 = java.io.File.createTempFile("att-2", ".jpg")
+        tempFile2.writeText("photo content 2")
+        tempFile2.deleteOnExit()
+
         val attachmentEntities = listOf(
             createMediaAttachmentEntity(
                 attachmentId = "att-1",
                 parentSurveyId = surveyId,
+                localFilePath = tempFile1.absolutePath,
                 syncStatus = SyncStatusEntity.SYNCED,
                 uploadedAt = Date()
             ),
             createMediaAttachmentEntity(
                 attachmentId = "att-2",
                 parentSurveyId = surveyId,
+                localFilePath = tempFile2.absolutePath,
                 syncStatus = SyncStatusEntity.SYNCED,
                 uploadedAt = Date()
             )
@@ -707,9 +726,15 @@ class SurveyRepositoryImplTest {
     fun `cleanupSyncedAttachments skips pending attachments`() = runTest {
         // Given: Survey with mix of synced and pending attachments
         val surveyId = "survey-1"
+
+        val tempFile1 = java.io.File.createTempFile("att-1", ".jpg")
+        tempFile1.writeText("photo content 1")
+        tempFile1.deleteOnExit()
+
         val attachmentEntities = listOf(
             createMediaAttachmentEntity(
                 attachmentId = "att-1",
+                localFilePath = tempFile1.absolutePath,
                 syncStatus = SyncStatusEntity.SYNCED,
                 uploadedAt = Date()
             ),
@@ -738,15 +763,26 @@ class SurveyRepositoryImplTest {
 
     @Test
     fun `cleanupOldSyncedAttachments deletes old synced attachments`() = runTest {
-        // Given: Old synced attachments
+        // Given: Old synced attachments with real temp files
         val oldTimestamp = System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L)
+
+        val tempFile1 = java.io.File.createTempFile("att-1", ".jpg")
+        tempFile1.writeText("photo content 1")
+        tempFile1.deleteOnExit()
+
+        val tempFile2 = java.io.File.createTempFile("att-2", ".jpg")
+        tempFile2.writeText("photo content 2")
+        tempFile2.deleteOnExit()
+
         val oldAttachments = listOf(
             createMediaAttachmentEntity(
                 attachmentId = "att-1",
+                localFilePath = tempFile1.absolutePath,
                 uploadedAt = Date(oldTimestamp)
             ),
             createMediaAttachmentEntity(
                 attachmentId = "att-2",
+                localFilePath = tempFile2.absolutePath,
                 uploadedAt = Date(oldTimestamp)
             )
         )

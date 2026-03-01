@@ -209,7 +209,7 @@ class GetPendingSurveysUseCaseTest {
         val error = (result as DomainResult.Error).error
         assertTrue(error is DomainError.DaoError)
         assertEquals("query", (error as DomainError.DaoError).operation)
-        assertEquals("Database locked", error.errorMessage)
+        assertEquals("Database error during query: Database locked", error.errorMessage)
     }
 
     @Test

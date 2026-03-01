@@ -278,7 +278,7 @@ class UploadMediaAttachmentsUseCaseTest {
         whenever(repository.uploadMediaAttachment(eq(surveyId), eq(attachments[1])))
             .thenReturn(domainError(createApiError(httpCode = 413)))
         whenever(repository.uploadMediaAttachment(eq(surveyId), eq(attachments[2])))
-            .thenReturn(error(createInternalError()))
+            .thenReturn(domainError(createInternalError()))
 
         // When: Upload attachments
         val results = uploadMediaAttachmentsUseCase.invoke(surveyId, attachments)

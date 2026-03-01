@@ -129,7 +129,7 @@ class SaveSurveyUseCaseTest {
         val error = (result as DomainResult.Error).error
         assertTrue(error is DomainError.DaoError)
         assertEquals("insert", (error as DomainError.DaoError).operation)
-        assertEquals("Database locked", error.errorMessage)
+        assertEquals("Database error during insert: Database locked", error.errorMessage)
     }
 
     @Test
