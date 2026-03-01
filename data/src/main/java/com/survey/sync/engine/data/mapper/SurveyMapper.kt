@@ -20,6 +20,7 @@ fun SyncStatusEntity.toDomain(): SyncStatus {
     return when (this) {
         SyncStatusEntity.PENDING -> SyncStatus.PENDING
         SyncStatusEntity.SYNCING -> SyncStatus.SYNCING
+        SyncStatusEntity.PENDING_MEDIA -> SyncStatus.PENDING_MEDIA
         SyncStatusEntity.SYNCED -> SyncStatus.SYNCED
         SyncStatusEntity.FAILED -> SyncStatus.FAILED
     }
@@ -32,6 +33,7 @@ fun SyncStatus.toEntity(): SyncStatusEntity {
     return when (this) {
         SyncStatus.PENDING -> SyncStatusEntity.PENDING
         SyncStatus.SYNCING -> SyncStatusEntity.SYNCING
+        SyncStatus.PENDING_MEDIA -> SyncStatusEntity.PENDING_MEDIA
         SyncStatus.SYNCED -> SyncStatusEntity.SYNCED
         SyncStatus.FAILED -> SyncStatusEntity.FAILED
     }

@@ -388,11 +388,15 @@ layer.
                   │              ┌─────────────────┘
                   │              │
                   │              ▼
-                  │   ┌──────────────────────────┐
-                  │   │ [STEP 5] Mark as SYNCED  │
-                  │   │ repository.updateSyncStatus│
-                  │   │   (surveyId, SYNCED)     │
-                  │   └──────────┬───────────────┘
+                  │   ┌──────────────────────────────┐
+                  │   │ [STEP 5] Set Final Status    │
+                  │   │ PENDING_MEDIA if:            │
+                  │   │  - skipMedia = true, OR      │
+                  │   │  - Some media failed         │
+                  │   │ SYNCED if:                   │
+                  │   │  - All media uploaded OR     │
+                  │   │  - No media exists           │
+                  │   └──────────┬───────────────────┘
                   │              │
                   │              ▼
                   │   ┌──────────────────────────┐
@@ -545,7 +549,23 @@ Initial State: PENDING
         │
         │ [Upload success]
         ▼
-    SYNCED (final state)
+   ┌────┴─────┐
+   │ Media?   │
+   └────┬─────┘
+        │
+     ┌──┴───────────────────┐
+     │ skipMedia = true OR  │
+     │ some media failed?   │
+     └──┬───────────────────┘
+        │
+   ┌────┴─────────────────────────────┐
+   │ YES (has pending/failed media)   │ NO (all uploaded or none)
+   ▼                                  ▼
+PENDING_MEDIA                     SYNCED (final state)
+   │
+   │ [Next sync: retry pending/failed media]
+   ▼
+SYNCED (final state)
 ```
 
 ### Example Scenarios
@@ -594,9 +614,9 @@ Step 2: Upload survey data → SUCCESS
 Step 3: Upload photo 1 → SUCCESS
 Step 4: Upload photo 2 → FAILED (network timeout)
 Step 5: Upload photo 3 → SUCCESS
-Step 6: Status SYNCING → SYNCED (survey still marked synced!)
+Step 6: Status SYNCING → PENDING_MEDIA (not all media uploaded)
 Step 7: Delete 2 successfully uploaded photos
-Step 8: Photo 2 remains PENDING for future retry
+Step 8: Photo 2 remains PENDING for next retry
 Step 9: Return result
 
 Output:
@@ -608,7 +628,9 @@ UploadSurveyResult(
     totalMediaCount = 3
 )
 
-Important: Survey is SYNCED, but photo 2 is still PENDING
+Survey Status: PENDING_MEDIA
+Photo 2 Status: PENDING
+Next Action: Will retry photo 2 on next sync (survey data won't be re-uploaded)
 ```
 
 #### Scenario 3: Network Error (Retryable)
@@ -665,6 +687,75 @@ DomainResult.error(
 Survey Status: FAILED (permanent)
 Retry Count: 3 (maxRetries)
 Next Action: Will NOT retry (excluded from future syncs)
+```
+
+#### Scenario 5: Media Skipped (PENDING_MEDIA)
+
+```
+Input:
+- Survey: survey-005 (2 text answers)
+- Media: 2 photos (3 MB each)
+- Network: Cellular (metered)
+- Battery: 15% (not charging)
+
+Execution:
+Step 1: Status PENDING → SYNCING
+Step 2: Upload survey data → SUCCESS
+Step 3: Check skipMedia conditions:
+    - Network is cellular (metered) → skipMedia = true
+    - Battery is low → skipMedia = true
+Step 4: Skip media uploads
+Step 5: Status SYNCING → PENDING_MEDIA
+Step 6: No cleanup (no media uploaded)
+Step 7: Return result
+
+Output:
+UploadSurveyResult(
+    surveyUploadResult = UploadResult(surveyId="survey-005", message="Success"),
+    mediaUploadSuccessCount = 0,
+    mediaUploadFailureCount = 0,
+    mediaSkippedCount = 2,
+    totalMediaCount = 2
+)
+
+Survey Status: PENDING_MEDIA
+Media Status: PENDING
+Next Action: Will retry on next sync when conditions improve (WiFi + battery)
+```
+
+#### Scenario 6: PENDING_MEDIA Retry Success
+
+```
+Input:
+- Survey: survey-005 (status = PENDING_MEDIA from Scenario 5)
+- Media: 2 photos (still PENDING)
+- Network: WiFi
+- Battery: 80%, charging
+
+Execution:
+Step 1: Survey already has PENDING_MEDIA status
+Step 2: Skip survey data upload (already uploaded)
+Step 3: Check skipMedia conditions:
+    - Network is WiFi → skipMedia = false
+    - Battery is good → skipMedia = false
+Step 4: Upload photo 1 → SUCCESS
+Step 5: Upload photo 2 → SUCCESS
+Step 6: Status PENDING_MEDIA → SYNCED
+Step 7: Cleanup uploaded photos
+Step 8: Return result
+
+Output:
+UploadSurveyResult(
+    surveyUploadResult = UploadResult(surveyId="survey-005", message="Already uploaded"),
+    mediaUploadSuccessCount = 2,
+    mediaUploadFailureCount = 0,
+    mediaSkippedCount = 0,
+    totalMediaCount = 2
+)
+
+Survey Status: SYNCED
+Media Status: SYNCED
+Next Action: No retry needed (fully synced)
 ```
 
 ---

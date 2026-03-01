@@ -52,11 +52,23 @@ class UploadSurveyUseCase @Inject constructor(
         skipMedia: Boolean = false,
         maxRetries: Int = 3
     ): DomainResult<DomainError, UploadSurveyResult> {
-        // Update status to SYNCING before upload
-        repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCING)
-
         // Step 1: Upload survey data (text only)
-        val surveyUploadResult = repository.uploadSurvey(survey)
+        // Skip if survey data was already uploaded (PENDING_MEDIA status)
+        val surveyUploadResult = if (survey.syncStatus == SyncStatus.PENDING_MEDIA) {
+            // Survey data already uploaded, skip to media upload
+            DomainResult.success(
+                UploadResult(
+                    success = true,
+                    surveyId = survey.surveyId,
+                    message = "Survey data already uploaded",
+                    uploadedAt = System.currentTimeMillis()
+                )
+            )
+        } else {
+            // Update status to SYNCING before upload
+            repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCING)
+            repository.uploadSurvey(survey)
+        }
 
         return surveyUploadResult.handle(
             onError = { error ->
@@ -100,10 +112,26 @@ class UploadSurveyUseCase @Inject constructor(
                     }
                 }
 
-                // Step 3: Update sync status
-                // Mark as SYNCED if survey uploaded successfully
-                // (Media failures/skips don't prevent survey from being marked as synced)
-                repository.updateSyncStatus(survey.surveyId, SyncStatus.SYNCED)
+                // Step 3: Update sync status based on media upload results
+                // Mark as PENDING_MEDIA if:
+                //   - Media was intentionally skipped (skipMedia = true), OR
+                //   - Some media uploads failed (mediaSuccessCount < total)
+                // Mark as SYNCED only if all media uploaded successfully or no media exists
+                val finalStatus = if (mediaAttachments.isNotEmpty() &&
+                    (skipMedia || mediaSuccessCount < mediaAttachments.size)
+                ) {
+                    SyncStatus.PENDING_MEDIA
+                } else {
+                    SyncStatus.SYNCED
+                }
+
+                // Increment retry count if this was a PENDING_MEDIA retry that's still PENDING_MEDIA
+                // This prevents infinite retries when conditions don't improve
+                if (survey.syncStatus == SyncStatus.PENDING_MEDIA && finalStatus == SyncStatus.PENDING_MEDIA) {
+                    repository.incrementSurveyRetryCount(survey.surveyId)
+                }
+
+                repository.updateSyncStatus(survey.surveyId, finalStatus)
 
                 // Step 4: Clean up successfully uploaded attachments
                 if (cleanupAttachments && mediaSuccessCount > 0) {

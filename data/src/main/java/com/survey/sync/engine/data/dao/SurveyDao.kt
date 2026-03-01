@@ -51,13 +51,16 @@ interface SurveyDao {
     /**
      * Get all pending surveys with full details (including answers and definitions).
      * Used by Sync Engine to build upload payloads.
-     * Includes both PENDING surveys and FAILED surveys that haven't exceeded max retry count.
+     * Includes PENDING surveys, PENDING_MEDIA surveys (retry media upload with retry limit),
+     * and FAILED surveys that haven't exceeded max retry count.
      */
     @Transaction
     @Query(
         """
         SELECT * FROM surveys
-        WHERE (syncStatus = 'PENDING' OR (syncStatus = 'FAILED' AND retryCount < :maxRetries))
+        WHERE (syncStatus = 'PENDING'
+            OR (syncStatus = 'PENDING_MEDIA' AND retryCount < :maxRetries)
+            OR (syncStatus = 'FAILED' AND retryCount < :maxRetries))
         ORDER BY createdAt ASC
     """
     )

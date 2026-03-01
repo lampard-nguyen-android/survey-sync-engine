@@ -16,6 +16,11 @@ enum class SyncStatusEntity {
     SYNCING,
 
     /**
+     * Survey data uploaded to server, media attachments pending (used by SurveyEntity)
+     */
+    PENDING_MEDIA,
+
+    /**
      * Successfully uploaded to server
      */
     SYNCED,

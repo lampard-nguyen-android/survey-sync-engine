@@ -693,7 +693,8 @@ Question Definitions ← UNCHANGED (RESTRICT protects them)
 │ PK  surveyId: String                 UUID for survey session                │
 │     agentId: String                  Who collected it                       │
 │     farmerId: String                 Survey subject                         │
-│     syncStatus: SyncStatusEntity     PENDING, SYNCING, SYNCED, FAILED       │
+│     syncStatus: SyncStatusEntity     PENDING, SYNCING, PENDING_MEDIA,       │
+│                                      SYNCED, FAILED                         │
 │     createdAt: Date                  Creation timestamp                     │
 │     retryCount: Int                  Sync retry attempts (max 3)            │
 │     lastAttemptAt: Date?             Last sync attempt timestamp            │
@@ -766,10 +767,11 @@ AnswerEntity (1) ←───────────────── (N) Medi
 SYNC STATUS VALUES (SyncStatusEntity enum):
 ══════════════════════════════════════════════════════════════════════════════
 
-PENDING   - Not yet uploaded to server (initial state)
-SYNCING   - Currently being uploaded (SurveyEntity only, transient state)
-SYNCED    - Successfully uploaded to server (final success state)
-FAILED    - Upload failed (SurveyEntity only, retryable if retryCount < max)
+PENDING       - Not yet uploaded to server (initial state)
+SYNCING       - Currently being uploaded (SurveyEntity only, transient state)
+PENDING_MEDIA - Survey data uploaded, media attachments pending (SurveyEntity only, retryable)
+SYNCED        - Successfully uploaded to server (final success state)
+FAILED        - Upload failed (SurveyEntity only, retryable if retryCount < max)
 
 
 CASCADE DELETION FLOW:

@@ -148,22 +148,22 @@ class UploadSurveyUseCaseTest {
             mediaAttachments = attachments
         )
 
-        // Then: Survey still marked as SYNCED, partial media success
+        // Then: Survey marked as PENDING_MEDIA (not SYNCED) due to partial media failure
         assertTrue(result is DomainResult.Success)
         val surveyResult = (result as DomainResult.Success).value
         assertEquals(2, surveyResult.mediaUploadSuccessCount)
         assertEquals(1, surveyResult.mediaUploadFailureCount)
         assertEquals(3, surveyResult.totalMediaCount)
 
-        // Verify: Survey marked as SYNCED even with media failures
-        verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
-        verify(repository).cleanupSyncedAttachments("survey-1")
+        // Verify: Survey marked as PENDING_MEDIA (will retry failed media on next sync)
+        verify(repository).updateSyncStatus("survey-1", SyncStatus.PENDING_MEDIA)
+        verify(repository).cleanupSyncedAttachments("survey-1")  // Still cleanup successful uploads
     }
 
     // ========== SKIP MEDIA SCENARIOS ==========
 
     @Test
-    fun `invoke skips media upload when skipMedia is true`() = runTest {
+    fun `invoke skips media upload when skipMedia is true and marks as PENDING_MEDIA`() = runTest {
         // Given: Survey with media attachments, skipMedia = true
         val survey = createSurvey(surveyId = "survey-1")
         val attachments = listOf(
@@ -182,7 +182,7 @@ class UploadSurveyUseCaseTest {
             skipMedia = true
         )
 
-        // Then: Media skipped, survey still synced
+        // Then: Media skipped, survey marked as PENDING_MEDIA for retry
         assertTrue(result is DomainResult.Success)
         val surveyResult = (result as DomainResult.Success).value
         assertEquals(0, surveyResult.mediaUploadSuccessCount)
@@ -190,10 +190,10 @@ class UploadSurveyUseCaseTest {
         assertEquals(2, surveyResult.mediaSkippedCount)
         assertEquals(2, surveyResult.totalMediaCount)
 
-        // Verify: Media upload not called, no cleanup
+        // Verify: Media upload not called, no cleanup, status set to PENDING_MEDIA
         verify(uploadMediaAttachmentsUseCase, never()).invoke(any(), any())
         verify(repository, never()).cleanupSyncedAttachments(any())
-        verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
+        verify(repository).updateSyncStatus("survey-1", SyncStatus.PENDING_MEDIA)
     }
 
     // ========== CLEANUP SCENARIOS ==========
@@ -508,4 +508,158 @@ class UploadSurveyUseCaseTest {
         assertEquals(SyncStatus.SYNCING, statusUpdates[0])
         assertEquals(SyncStatus.FAILED, statusUpdates[1])
     }
+
+    // ========== PENDING_MEDIA RETRY SCENARIOS ==========
+
+    @Test
+    fun `invoke skips survey data upload for PENDING_MEDIA survey and only uploads media`() =
+        runTest {
+            // Given: Survey with PENDING_MEDIA status (survey data already uploaded)
+            val survey = createSurvey(surveyId = "survey-1", syncStatus = SyncStatus.PENDING_MEDIA)
+            val attachments = listOf(
+                createMediaAttachment(attachmentId = "att-1"),
+                createMediaAttachment(attachmentId = "att-2")
+            )
+
+            val mediaResults = mapOf(
+                "att-1" to domainSuccess(createMediaUploadResult("att-1")),
+                "att-2" to domainSuccess(createMediaUploadResult("att-2"))
+            )
+
+            whenever(repository.updateSyncStatus(any(), any())).thenReturn(domainSuccess(Unit))
+            whenever(uploadMediaAttachmentsUseCase.invoke(any(), any())).thenReturn(mediaResults)
+            whenever(repository.cleanupSyncedAttachments(any())).thenReturn(domainSuccess(2))
+
+            // When: Upload survey with PENDING_MEDIA status
+            val result = uploadSurveyUseCase.invoke(
+                survey = survey,
+                mediaAttachments = attachments,
+                cleanupAttachments = true,
+                skipMedia = false
+            )
+
+            // Then: Media uploaded successfully, survey marked as SYNCED
+            assertTrue(result is DomainResult.Success)
+            val surveyResult = (result as DomainResult.Success).value
+            assertEquals(2, surveyResult.mediaUploadSuccessCount)
+            assertEquals(0, surveyResult.mediaUploadFailureCount)
+            assertEquals(0, surveyResult.mediaSkippedCount)
+            assertEquals(2, surveyResult.totalMediaCount)
+
+            // Verify: Survey data upload NOT called, media uploaded, cleanup called
+            verify(repository, never()).uploadSurvey(any())
+            verify(uploadMediaAttachmentsUseCase).invoke("survey-1", attachments)
+            verify(repository).cleanupSyncedAttachments("survey-1")
+            verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
+        }
+
+    @Test
+    fun `invoke with skipMedia false and no media marks survey as SYNCED`() = runTest {
+        // Given: Survey with no media attachments
+        val survey = createSurvey(surveyId = "survey-1")
+        val uploadResult = createUploadResult(surveyId = "survey-1")
+
+        whenever(repository.updateSyncStatus(any(), any())).thenReturn(domainSuccess(Unit))
+        whenever(repository.uploadSurvey(survey)).thenReturn(domainSuccess(uploadResult))
+
+        // When: Upload survey with no media, skipMedia = false
+        val result = uploadSurveyUseCase.invoke(
+            survey = survey,
+            mediaAttachments = emptyList(),
+            skipMedia = false
+        )
+
+        // Then: Survey marked as SYNCED (not PENDING_MEDIA)
+        assertTrue(result is DomainResult.Success)
+
+        // Verify: Status set to SYNCED
+        verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
+    }
+
+    @Test
+    fun `invoke with skipMedia true but no media marks survey as SYNCED`() = runTest {
+        // Given: Survey with no media attachments, skipMedia = true
+        val survey = createSurvey(surveyId = "survey-1")
+        val uploadResult = createUploadResult(surveyId = "survey-1")
+
+        whenever(repository.updateSyncStatus(any(), any())).thenReturn(domainSuccess(Unit))
+        whenever(repository.uploadSurvey(survey)).thenReturn(domainSuccess(uploadResult))
+
+        // When: Upload survey with no media, skipMedia = true
+        val result = uploadSurveyUseCase.invoke(
+            survey = survey,
+            mediaAttachments = emptyList(),
+            skipMedia = true
+        )
+
+        // Then: Survey marked as SYNCED (not PENDING_MEDIA, no media to skip)
+        assertTrue(result is DomainResult.Success)
+
+        // Verify: Status set to SYNCED, not PENDING_MEDIA
+        verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
+    }
+
+    @Test
+    fun `invoke with PENDING_MEDIA survey and skipMedia true keeps survey as PENDING_MEDIA and increments retryCount`() =
+        runTest {
+            // Given: Survey with PENDING_MEDIA status, still bad conditions
+            val survey = createSurvey(surveyId = "survey-1", syncStatus = SyncStatus.PENDING_MEDIA)
+            val attachments = listOf(
+                createMediaAttachment(attachmentId = "att-1")
+            )
+
+            whenever(repository.updateSyncStatus(any(), any())).thenReturn(domainSuccess(Unit))
+            whenever(repository.incrementSurveyRetryCount(any())).thenReturn(domainSuccess(Unit))
+
+            // When: Upload with skipMedia = true (still bad network/battery)
+            val result = uploadSurveyUseCase.invoke(
+                survey = survey,
+                mediaAttachments = attachments,
+                skipMedia = true
+            )
+
+            // Then: Media skipped again, survey remains PENDING_MEDIA
+            assertTrue(result is DomainResult.Success)
+            val surveyResult = (result as DomainResult.Success).value
+            assertEquals(1, surveyResult.mediaSkippedCount)
+
+            // Verify: Survey data not uploaded, media not uploaded, status kept as PENDING_MEDIA
+            // IMPORTANT: retryCount should be incremented to prevent infinite retries
+            verify(repository, never()).uploadSurvey(any())
+            verify(uploadMediaAttachmentsUseCase, never()).invoke(any(), any())
+            verify(repository).incrementSurveyRetryCount("survey-1")
+            verify(repository).updateSyncStatus("survey-1", SyncStatus.PENDING_MEDIA)
+        }
+
+    @Test
+    fun `invoke with PENDING_MEDIA survey retried successfully does NOT increment retryCount`() =
+        runTest {
+            // Given: Survey with PENDING_MEDIA status, good conditions now
+            val survey = createSurvey(surveyId = "survey-1", syncStatus = SyncStatus.PENDING_MEDIA)
+            val attachments = listOf(
+                createMediaAttachment(attachmentId = "att-1")
+            )
+
+            val mediaResults = mapOf(
+                "att-1" to domainSuccess(createMediaUploadResult("att-1"))
+            )
+
+            whenever(repository.updateSyncStatus(any(), any())).thenReturn(domainSuccess(Unit))
+            whenever(uploadMediaAttachmentsUseCase.invoke(any(), any())).thenReturn(mediaResults)
+            whenever(repository.cleanupSyncedAttachments(any())).thenReturn(domainSuccess(1))
+
+            // When: Upload with skipMedia = false (good conditions)
+            val result = uploadSurveyUseCase.invoke(
+                survey = survey,
+                mediaAttachments = attachments,
+                skipMedia = false
+            )
+
+            // Then: Media uploaded successfully, survey becomes SYNCED
+            assertTrue(result is DomainResult.Success)
+
+            // Verify: retryCount should NOT be incremented (successful upload)
+            verify(repository, never()).incrementSurveyRetryCount(any())
+            verify(repository).updateSyncStatus("survey-1", SyncStatus.SYNCED)
+        }
 }
