@@ -1,0 +1,352 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "8a3d4498b79db2829038274a3eca2258",
+    "entities": [
+      {
+        "tableName": "surveys",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`surveyId` TEXT NOT NULL, `agentId` TEXT NOT NULL, `farmerId` TEXT NOT NULL, `syncStatus` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `retryCount` INTEGER NOT NULL, `lastAttemptAt` INTEGER, PRIMARY KEY(`surveyId`))",
+        "fields": [
+          {
+            "fieldPath": "surveyId",
+            "columnName": "surveyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "agentId",
+            "columnName": "agentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "farmerId",
+            "columnName": "farmerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAttemptAt",
+            "columnName": "lastAttemptAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "surveyId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "question_definitions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`questionKey` TEXT NOT NULL, `sectionType` TEXT NOT NULL, `isRepeating` INTEGER NOT NULL, `inputType` TEXT NOT NULL, `labelText` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`questionKey`))",
+        "fields": [
+          {
+            "fieldPath": "questionKey",
+            "columnName": "questionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectionType",
+            "columnName": "sectionType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRepeating",
+            "columnName": "isRepeating",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inputType",
+            "columnName": "inputType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "labelText",
+            "columnName": "labelText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "questionKey"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "answers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`answerUuid` TEXT NOT NULL, `parentSurveyId` TEXT NOT NULL, `questionKey` TEXT NOT NULL, `instanceIndex` INTEGER NOT NULL, `answerValue` TEXT, `answeredAt` INTEGER NOT NULL, `uploadedAt` INTEGER, `syncStatus` TEXT NOT NULL, `retryCount` INTEGER NOT NULL, PRIMARY KEY(`answerUuid`), FOREIGN KEY(`parentSurveyId`) REFERENCES `surveys`(`surveyId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`questionKey`) REFERENCES `question_definitions`(`questionKey`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "answerUuid",
+            "columnName": "answerUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentSurveyId",
+            "columnName": "parentSurveyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "questionKey",
+            "columnName": "questionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceIndex",
+            "columnName": "instanceIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answerValue",
+            "columnName": "answerValue",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "answeredAt",
+            "columnName": "answeredAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uploadedAt",
+            "columnName": "uploadedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "answerUuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_answers_parentSurveyId",
+            "unique": false,
+            "columnNames": [
+              "parentSurveyId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_answers_parentSurveyId` ON `${TABLE_NAME}` (`parentSurveyId`)"
+          },
+          {
+            "name": "index_answers_questionKey",
+            "unique": false,
+            "columnNames": [
+              "questionKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_answers_questionKey` ON `${TABLE_NAME}` (`questionKey`)"
+          },
+          {
+            "name": "index_answers_answerUuid",
+            "unique": true,
+            "columnNames": [
+              "answerUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_answers_answerUuid` ON `${TABLE_NAME}` (`answerUuid`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "surveys",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "parentSurveyId"
+            ],
+            "referencedColumns": [
+              "surveyId"
+            ]
+          },
+          {
+            "table": "question_definitions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "questionKey"
+            ],
+            "referencedColumns": [
+              "questionKey"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_attachments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`attachmentId` TEXT NOT NULL, `parentSurveyId` TEXT NOT NULL, `answerUuid` TEXT NOT NULL, `localFilePath` TEXT NOT NULL, `fileSize` INTEGER NOT NULL, `uploadedAt` INTEGER, `syncStatus` TEXT NOT NULL, `retryCount` INTEGER NOT NULL, PRIMARY KEY(`attachmentId`), FOREIGN KEY(`parentSurveyId`) REFERENCES `surveys`(`surveyId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`answerUuid`) REFERENCES `answers`(`answerUuid`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "attachmentId",
+            "columnName": "attachmentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentSurveyId",
+            "columnName": "parentSurveyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answerUuid",
+            "columnName": "answerUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localFilePath",
+            "columnName": "localFilePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileSize",
+            "columnName": "fileSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uploadedAt",
+            "columnName": "uploadedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "attachmentId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_attachments_parentSurveyId",
+            "unique": false,
+            "columnNames": [
+              "parentSurveyId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_attachments_parentSurveyId` ON `${TABLE_NAME}` (`parentSurveyId`)"
+          },
+          {
+            "name": "index_media_attachments_answerUuid",
+            "unique": false,
+            "columnNames": [
+              "answerUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_attachments_answerUuid` ON `${TABLE_NAME}` (`answerUuid`)"
+          },
+          {
+            "name": "index_media_attachments_attachmentId",
+            "unique": true,
+            "columnNames": [
+              "attachmentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_media_attachments_attachmentId` ON `${TABLE_NAME}` (`attachmentId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "surveys",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "parentSurveyId"
+            ],
+            "referencedColumns": [
+              "surveyId"
+            ]
+          },
+          {
+            "table": "answers",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "answerUuid"
+            ],
+            "referencedColumns": [
+              "answerUuid"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8a3d4498b79db2829038274a3eca2258')"
+    ]
+  }
+}
