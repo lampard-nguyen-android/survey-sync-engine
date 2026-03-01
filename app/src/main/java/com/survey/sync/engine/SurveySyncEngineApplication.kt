@@ -7,6 +7,7 @@ import com.survey.sync.engine.data.manager.ConnectivityManager
 import com.survey.sync.engine.data.manager.DeviceResourceManager
 import com.survey.sync.engine.work.SyncWorkManager
 import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -34,6 +35,10 @@ class SurveySyncEngineApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
 
         // Monitor network status & device resources
         connectivityManager.startConnectivityListener()
